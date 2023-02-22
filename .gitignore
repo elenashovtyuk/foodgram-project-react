@@ -128,8 +128,11 @@ dmypy.json
 # Pyre type checker
 .pyre/
 
-# .idea
+# pycharm
 .idea
+.DS_Store
+.AppleDouble
+.LSOverride
 
 # vscode
 .vscode/
