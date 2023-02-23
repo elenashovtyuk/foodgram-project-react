@@ -3,12 +3,33 @@ from django.db import models
 from users.models import User
 
 
-class Ingredients(models.Model):
+# объявляем класс Ingredient - наследник класса Model
+# в соответствии с Django Coding Style поочередно выполняем след.шаги:
+# первый шаг - описываем поля модели, их типы, свойства
+# второй шаг - описываем класс Meta, чтобы добавить данные о самой модели
+# третий шаг - указываем метод __str__ - строковое представление объекта
+class Ingredient(models.Model):
     """Модель ингредиентов."""
-    pass
+    name = models.CharField(
+        'Название ингредиента',
+        max_length=200
+    )
+    measurement_unit = models.CharField(
+        'Единица измерения',
+        max_length=200
+    )
+
+    class Meta:
+        verbose_name = 'Ингредиент'
+        verbose_name_plural = 'Ингредиенты'
+        ordering = ['name']
+
+    def __str__(self):
+        """Строковое представление объекта модели."""
+        return self.name
 
 
-class Tags(models.Model):
+class Tag(models.Model):
     """Модель тега."""
     pass
 
@@ -18,7 +39,7 @@ class Tags(models.Model):
 # первый шаг - описываем поля модели, их типы, свойства
 # второй шаг - описываем класс Meta, чтобы добавить данные о самой модели
 # третий шаг - указываем метод __str__ - строковое представление объекта
-class Recipes(models.Model):
+class Recipe(models.Model):
     """Модель рецепта."""
     # поле author поле отношения с моделью User
     # указываем модель, связь с которой обеспечивает это поле - User
@@ -36,14 +57,14 @@ class Recipes(models.Model):
 
     # поле представляет собой связь с таблицей Tags
     tags = models.ManyToManyField(
-        Tags,
+        Tag,
         verbose_name='Теги',
         related_name='recipes'
     )
 
     # поле представляет собой связь с таблицей Ingredients
     ingredients = models.ManyToManyField(
-        Ingredients,
+        Ingredient,
         verbose_name='Ингридиенты',
         related_name='recipes'
     )
