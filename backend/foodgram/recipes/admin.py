@@ -2,9 +2,12 @@ from django.contrib import admin
 
 # Регистрируем модель Recipe
 # сначала импортируем ее из нашего модуля models.py
-from .models import Recipe
+from .models import Recipe, Ingredient
 
 
+# для настройки отображения модели Recipe в админке применяем класс
+# AdminModel, который связывается с моделью Recipe и конфигурирует
+# отображение данных этой модели в интерфейсе админки
 class RecipeAdmin(admin.ModelAdmin):
     # перечисляем поля, которые должны отображаться в админке
     # по ТЗ для модели рецептов в админ-зону в списке рецептов
@@ -16,6 +19,20 @@ class RecipeAdmin(admin.ModelAdmin):
     # в избранное
 
 
+# для настройки отображения модели Ingredient в админке применяем класс
+# AdminModel, который связывается с моделью Ingredient и конфигурирует
+# отображение данных этой модели в интерфейсе админки
+class IngredientAdmin(admin.ModelAdmin):
+    # далее согласно ТЗ перечисляем поля, которые должны отображаться в админке
+    # это название и ед.измерения
+    list_display = ('pk', 'name', 'measurement_unit')
+    # также по ТЗ нужно настроить фильтрацию по названию
+    list_filter = ('name',)
+
+
 # при регистрации модели Recipe источником конфигурации для нее
 # назначаем RecipeAdmin
 admin.site.register(Recipe, RecipeAdmin)
+# при регистрации модели Ingredient в админ-зоне
+# источником конфигурации для нее назначенм IngredientAdmin
+admin.site.register(Ingredient, IngredientAdmin)
