@@ -1,4 +1,4 @@
-from django.core.validators import MinValueValidator
+from django.core.validators import MinValueValidator, RegexValidator
 from django.db import models
 from users.models import User
 
@@ -29,9 +29,46 @@ class Ingredient(models.Model):
         return self.name
 
 
+# объявляем класс Tag - наследник класса Model
+# в соответствии с Django Coding Style поочередно выполняем след.шаги:
+# первый шаг - описываем поля модели, их типы, свойства
+# второй шаг - описываем класс Meta, чтобы добавить данные о самой модели
+# третий шаг - указываем метод __str__ - строковое представление объекта
+# все поля в модели Тег обязательны и уникальны
 class Tag(models.Model):
     """Модель тега."""
-    pass
+    name = models.CharField(
+        'Название',
+        unique=True,
+        max_length=200
+    )
+    # для поля color нужно применить валидатор, чтобы проверить,
+    # что введено корректное значение - цветовой код в нужном формате
+    # если в представленном пользователем значении не будет
+    # соответствующего - т.е в нужном формает, то вернется message
+    # с ошибкой
+    color = models.CharField(
+        'Цветовой HEX-код',
+        unique=True,
+        max_length=7,
+        validators=(
+            RegexValidator(
+                '^#([a-fA-F0-9]{6})',
+                message='Введенное значение не является цветовым HEX-кодом!'))
+    )
+    slug = models.SlugField(
+        'Уникальный слаг',
+        unique=True,
+        max_length=200
+    )
+
+    class Meta:
+        verbose_name = 'Тег',
+        verbose_name_plural = 'Теги',
+
+    def __str__(self):
+        """Строковое представление объекта модели."""
+        return self.name
 
 
 # объявляем класс Recipe - наследник класса Model
