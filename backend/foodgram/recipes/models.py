@@ -54,7 +54,7 @@ class Tag(models.Model):
         validators=(
             RegexValidator(
                 '^#([a-fA-F0-9]{6})',
-                message='Введенное значение не является цветовым HEX-кодом!'))
+                message='Введенное значение не является цветовым HEX-кодом!'),)
     )
     slug = models.SlugField(
         'Уникальный слаг',
@@ -63,8 +63,8 @@ class Tag(models.Model):
     )
 
     class Meta:
-        verbose_name = 'Тег',
-        verbose_name_plural = 'Теги',
+        verbose_name = 'Тег'
+        verbose_name_plural = 'Теги'
 
     def __str__(self):
         """Строковое представление объекта модели."""
