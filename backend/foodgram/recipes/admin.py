@@ -2,7 +2,7 @@ from django.contrib import admin
 
 # Регистрируем модель Recipe
 # сначала импортируем ее из нашего модуля models.py
-from .models import Recipe, Ingredient, Tag
+from .models import Recipe, Ingredient, Tag, RecipeIngredient
 
 
 # для настройки отображения модели Recipe в админке применяем класс
@@ -35,6 +35,10 @@ class TagAdmin(admin.ModelAdmin):
     list_display = ('pk', 'name', 'color', 'slug')
 
 
+class RecipeIngredientAdmin(admin.ModelAdmin):
+    list_display = ('recipe', 'ingredient', 'amount')
+
+
 # при регистрации модели Recipe источником конфигурации для нее
 # назначаем RecipeAdmin
 admin.site.register(Recipe, RecipeAdmin)
@@ -44,3 +48,6 @@ admin.site.register(Ingredient, IngredientAdmin)
 # при регистрации модели Tag в админ-зоне
 # источником конфигурации для нее назначенм TagAdmin
 admin.site.register(Tag, TagAdmin)
+# при регистрации промежуточной модели RecipeIngredient
+# источником конфигурации указываем RecipeIngredientAdmin
+admin.site.register(RecipeIngredient, RecipeIngredientAdmin)
