@@ -156,10 +156,13 @@ class Recipe(models.Model):
         return self.name
 
 
-# создаем промежуточную модель между Recipe и Ingredient
+# объявляем класс RecipeIngredient -
+# наследник класса Model
+# это промежуточная модель между Recipe и Ingredient
 # ее нужно задавать "вручную", так как необходимы дополнительные поля
 # в промежуточной модели помимо тех, что автоматически создаются
 class RecipeIngredient(models.Model):
+    """Модель ингредиентов в составе рецепта"""
     # сначала явно указываем поля - внешние ключи от моделей,
     #  которые учавствуют в этой связи ManyToMany
     recipe = models.ForeignKey(
@@ -181,6 +184,7 @@ class RecipeIngredient(models.Model):
         validators=[MinValueValidator(1, message='Минимальное количество 1!')])
 
     # в настройках модели, в классе Meta нужно указать уникальность комбинации
+    # ингредиент-рецепт
     # рецепт-ингредиент с помощью опции constraints
     class Meta:
         verbose_name = 'Ингредиент в рецепте'
@@ -188,7 +192,7 @@ class RecipeIngredient(models.Model):
         constraints = (
             models.UniqueConstraint(
                 fields=('recipe', 'ingredient'),
-                name='Каждый ингредиент в рецепте должен быть уникальным!'
+                name='unique_ingredient_in_recipe'
             ),
         )
 
@@ -200,3 +204,44 @@ class RecipeIngredient(models.Model):
             f'{self.amount}',
             f'{self.ingredient.measurement_unit}'
         )
+
+
+# объявляем класс Favorite(Избранное)
+# это модель рецептов, добавленных в избранное пользователем
+# в соответствии с Django Coding Style поочередно выполняем след.шаги:
+# первый шаг - описываем поля модели, их типы, свойства
+# второй шаг - описываем класс Meta, чтобы добавить данные о самой модели
+# третий шаг - указываем метод __str__ - строковое представление объекта
+class Favorite(models.Model):
+    # 1-ое поле - пользователь, который добавил рецепт в Избраннное
+    user = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        verbose_name='Пользователь, добавивший в избранное',
+        related_name='favorite_recipe'
+    )
+    # 2-ое поле - рецепт, который добавили в избранное
+    recipe = models.ForeignKey(
+        Recipe,
+        on_delete=models.CASCADE,
+        verbose_name='Рецепт, добавленный в избранное',
+        related_name='favorite_recipe'
+    )
+
+    # далее класс Meta
+    # в поведении этой модели необходимо указать,
+    # что пользователь может только однажды добавить рецепт в избранное
+    class Meta:
+        verbose_name = 'Рецепт, добавленный в избранное'
+        verbose_name_plural = 'Рецепты, добавленные в избранное'
+        constraints = (
+            models.UniqueConstraint(
+                fields=('user', 'recipe'),
+                name='unique_favorite_recipe'
+            ),
+        )
+
+    # далее магический метод str
+    def __str__(self):
+        """Строковое представление объекта модели."""
+        return f'Пользователь {self.user} добавил "{self.recipe}" в Избранное'
