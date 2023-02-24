@@ -232,8 +232,8 @@ class Favorite(models.Model):
     # в поведении этой модели необходимо указать,
     # что пользователь может только однажды добавить рецепт в избранное
     class Meta:
-        verbose_name = 'Рецепт, добавленный в избранное'
-        verbose_name_plural = 'Рецепты, добавленные в избранное'
+        verbose_name = 'Избранный рецепт'
+        verbose_name_plural = 'Избранные рецепты'
         constraints = (
             models.UniqueConstraint(
                 fields=('user', 'recipe'),
