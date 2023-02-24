@@ -100,8 +100,16 @@ class Recipe(models.Model):
     )
 
     # поле представляет собой связь с таблицей Ingredients
+    # связь ManyToMany
+    # промежуточная модель в Django создается автоматически,
+    # но если нужно в промежуточной модели указать дополнительные поля
+    # то есть, не только recipe_id и ingredient_id, то нужно
+    # то нужно эту промежуточную модель задать вручную,
+    # а для ingredient в модели recipe указать через опцию througth
+    # через какую модель это поле ingredient связано с моделью Recipe
     ingredients = models.ManyToManyField(
         Ingredient,
+        through='RecipeIngredient',
         verbose_name='Ингридиенты',
         related_name='recipes'
     )
@@ -146,3 +154,49 @@ class Recipe(models.Model):
     def __str__(self):
         """Строковое представление объекта модели."""
         return self.name
+
+
+# создаем промежуточную модель между Recipe и Ingredient
+# ее нужно задавать "вручную", так как необходимы дополнительные поля
+# в промежуточной модели помимо тех, что автоматически создаются
+class RecipeIngredient(models.Model):
+    # сначала явно указываем поля - внешние ключи от моделей,
+    #  которые учавствуют в этой связи ManyToMany
+    recipe = models.ForeignKey(
+        Recipe,
+        on_delete=models.CASCADE,
+        verbose_name='Рецепт',
+        related_name='recipes'
+    )
+    ingredient = models.ForeignKey(
+        Ingredient,
+        on_delete=models.CASCADE,
+        verbose_name='Ингредиент',
+        related_name='ingredients'
+    )
+    # далее в этой промежуточной модели должно быть дополнительное
+    # поле по кол-ву ингредиентов
+    amount = models.PositiveSmallIntegerField(
+        'Количество',
+        validators=[MinValueValidator(1, message='Минимальное количество 1!')])
+
+    # в настройках модели, в классе Meta нужно указать уникальность комбинации
+    # рецепт-ингредиент с помощью опции constraints
+    class Meta:
+        verbose_name = 'Ингредиент в рецепте'
+        verbose_name_plural = 'Ингредиенты в рецептах'
+        constraints = (
+            models.UniqueConstraint(
+                fields=('recipe', 'ingredient'),
+                name='Каждый ингредиент в рецепте должен быть уникальным!'
+            ),
+        )
+
+    def __str__(self):
+        """Строковое представление объекта модели."""
+        return (
+            f'{self.recipe.name}: ',
+            f'{self.ingredient.name} - ',
+            f'{self.amount}',
+            f'{self.ingredient.measurement_unit}'
+        )
