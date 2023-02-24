@@ -40,6 +40,10 @@ class TagAdmin(admin.ModelAdmin):
     list_display = ('pk', 'name', 'color', 'slug')
 
 
+class RecipeIngredientAdmin(admin.ModelAdmin):
+    list_display = ('recipe', 'ingredient', 'amount')
+
+
 class UserAdmin(admin.ModelAdmin):
     pass
 
@@ -53,5 +57,5 @@ admin.site.register(Ingredient, IngredientAdmin)
 # при регистрации модели Tag в админ-зоне
 # источником конфигурации для нее назначенм TagAdmin
 admin.site.register(Tag, TagAdmin)
-
+admin.site.register(RecipeIngredient, RecipeIngredientAdmin)
 admin.site.register(User, UserAdmin)
