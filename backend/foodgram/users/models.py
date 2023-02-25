@@ -8,6 +8,7 @@ from django.core.validators import RegexValidator
 # в дальнейшем использование этого класса упростит внесение изменений
 # в модель пользователя, расширение функциональности пользователя
 class User(AbstractUser):
+    """Модель пользователя."""
     # создаем поля, сверяя с исходным кодом класса AbstractUser
     # проверяя соответствие требованиям ТЗ(redoc)
     # поля first_name и last_name не указываем явно - так как они
@@ -31,6 +32,8 @@ class User(AbstractUser):
             ),
         )
     )
+    first_name = models.CharField('Имя', max_length=150)
+    last_name = models.CharField('Фамилия', max_length=150)
 
     password = models.CharField(
         verbose_name='Пароль пользователя',
@@ -46,3 +49,40 @@ class User(AbstractUser):
     def __str__(self):
         """Строковое представление объекта модели."""
         return self.username
+
+
+# создаем модель подписки
+class Subscription(models.Model):
+    """Модель подписки."""
+    # согласно Django Coding Style создаем поля модели,
+    #  потом класс Meta,
+    # потом метод строкового представления модели
+    user = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        verbose_name='Подписчик',
+        related_name='subscriber'
+    )
+    author = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        verbose_name='Автор рецепта',
+        related_name='subscribing'
+    )
+
+    class Meta:
+        verbose_name = 'Подписка'
+        verbose_name_plural = 'Подписки'
+        # в классе Meta необходимо задать опцию constraints
+        # применяем класс UniqueConstraints
+        # чтобы указать уникальность подписки - т.е
+        # нельзя дважды подписаться на одного автора рецепта
+        constraints = (
+            models.UniqueConstraint(
+                fields=('user', 'author'),
+                name='unique_subscribe'
+            ),
+        )
+
+    def __str__(self):
+        return (f'{self.user} подписан на {self.author}')
