@@ -13,6 +13,7 @@ class UserAdmin(admin.ModelAdmin):
     # также по ТЗ администратор должен иметь возможность
     # менять пароль пользователю
     list_editable = ('password',)
+    empty_value_display = '-пусто-'
 
 
 admin.site.register(User, UserAdmin)
