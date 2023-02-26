@@ -126,6 +126,7 @@ class Recipe(models.Model):
     image = models.ImageField(
         'Изображение рецепта',
         upload_to='recipes/',
+        blank=True
     )
     # текстовое поле с описанием рецепта
     # не имеет ограничения по длине текста
@@ -141,7 +142,7 @@ class Recipe(models.Model):
         validators=(
             MinValueValidator(
                 settings.MIN_COOKING_TIME,
-                message='Минимально допустимое значение - 1 минута!',
+                message='Минимально допустимое значение - 1 минута!'
             ),
         )
     )
@@ -172,13 +173,13 @@ class RecipeIngredient(models.Model):
         Recipe,
         on_delete=models.CASCADE,
         verbose_name='Связанный рецепт',
-        related_name='ingredients'
+        related_name='recipes'
     )
     ingredient = models.ForeignKey(
         Ingredient,
         on_delete=models.CASCADE,
         verbose_name='Связанные ингредиенты',
-        related_name='recipes'
+        related_name='ingredients'
     )
     # далее в этой промежуточной модели должно быть дополнительное
     # поле по кол-ву ингредиентов
@@ -187,13 +188,10 @@ class RecipeIngredient(models.Model):
         validators=(
             MinValueValidator(
                 settings.MIN_AMOUNT_INGR,
-                message='Минимальное количество 1!')
+                message='Минимальное количество 1!'),
         )
     )
 
-    # в настройках модели, в классе Meta нужно указать уникальность комбинации
-    # ингредиент-рецепт
-    # рецепт-ингредиент с помощью опции constraints
     class Meta:
         verbose_name = 'Ингредиент в рецепте'
         verbose_name_plural = 'Ингредиенты в рецептах'
@@ -207,9 +205,9 @@ class RecipeIngredient(models.Model):
     def __str__(self):
         """Строковое представление объекта модели."""
         return (
-            f'{self.recipe.name}: ',
-            f'{self.ingredient.name} - ',
-            f'{self.amount}',
+            f'{self.recipe.name}: '
+            f'{self.ingredient.name} - '
+            f'{self.amount}'
             f'{self.ingredient.measurement_unit}'
         )
 
@@ -222,17 +220,15 @@ class RecipeIngredient(models.Model):
 # третий шаг - указываем метод __str__ - строковое представление объекта
 class Favorite(models.Model):
     """
-    Модель связи Recipe и  User.
-    Содержит сведения об избранных рецептах пользователя.
+    Модель избранных рецептов.
+    Связь моделей Recipe и User.
     """
-    # 1-ое поле - пользователь, который добавил рецепт в Избраннное
     user = models.ForeignKey(
         User,
         on_delete=models.CASCADE,
         verbose_name='Пользователь, добавивший в избранное',
         related_name='favorite_recipe'
     )
-    # 2-ое поле - рецепт, который добавили в избранное
     recipe = models.ForeignKey(
         Recipe,
         on_delete=models.CASCADE,
@@ -240,9 +236,6 @@ class Favorite(models.Model):
         related_name='favorite_recipe'
     )
 
-    # далее класс Meta
-    # в поведении этой модели необходимо указать,
-    # что пользователь может только однажды добавить рецепт в избранное
     class Meta:
         verbose_name = 'Избранный рецепт'
         verbose_name_plural = 'Избранные рецепты'
@@ -253,7 +246,45 @@ class Favorite(models.Model):
             ),
         )
 
-    # далее магический метод str
     def __str__(self):
         """Строковое представление объекта модели."""
         return f'Пользователь {self.user} добавил "{self.recipe}" в Избранное'
+
+
+# создаем модель списка покупок
+class ShoppingCart(models.Model):
+    """
+    Модель списка покупок.
+    Связь моделей User и Recipe.
+    """
+    user = models.ForeignKey(
+        User,
+        verbose_name='Пользователь',
+        related_name='carts',
+        on_delete=models.CASCADE
+    )
+    recipe = models.ForeignKey(
+        Recipe,
+        verbose_name='Рецепт добавленный в список покупок',
+        related_name='carts',
+        on_delete=models.CASCADE
+    )
+    add_date = models.DateTimeField(
+        'Дата добавления рецепта в список покупок',
+        auto_now_add=True
+    )
+
+    class Meta:
+        verbose_name = 'Рецепт в списке покупок'
+        verbose_name_plural = 'Рецепты в списке покупок'
+        ordering = ('-add_date',)
+        constraints = (
+            models.UniqueConstraint(
+                fields=('user', 'recipe'),
+                name='unique_recipe_in_cart'
+            ),
+        )
+
+    def __str__(self):
+        """Строковое представление объекта модели."""
+        return f'{self.recipe} в списке покупок {self.user}'
