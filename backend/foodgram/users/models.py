@@ -1,6 +1,7 @@
 from django.db import models
 from django.contrib.auth.models import AbstractUser
 from django.core.validators import RegexValidator
+from django.conf import settings
 
 
 # Create your models here.
@@ -22,7 +23,7 @@ class User(AbstractUser):
     )
     username = models.CharField(
         verbose_name='Уникальный юзернэйм',
-        max_length=150,
+        max_length=settings.MAX_LEN_FIELD_USER,
         unique=True,
         default='default_username',
         validators=(
@@ -32,12 +33,18 @@ class User(AbstractUser):
             ),
         )
     )
-    first_name = models.CharField('Имя', max_length=150)
-    last_name = models.CharField('Фамилия', max_length=150)
+    first_name = models.CharField(
+        'Имя',
+        max_length=settings.MAX_LEN_FIELD_USER
+    )
+    last_name = models.CharField(
+        'Фамилия',
+        max_length=settings.MAX_LEN_FIELD_USER
+    )
 
     password = models.CharField(
         verbose_name='Пароль пользователя',
-        max_length=150,
+        max_length=settings.MAX_LEN_FIELD_USER,
         default='default_password'
     )
 
@@ -54,9 +61,6 @@ class User(AbstractUser):
 # создаем модель подписки
 class Subscription(models.Model):
     """Модель подписки."""
-    # согласно Django Coding Style создаем поля модели,
-    #  потом класс Meta,
-    # потом метод строкового представления модели
     user = models.ForeignKey(
         User,
         on_delete=models.CASCADE,
