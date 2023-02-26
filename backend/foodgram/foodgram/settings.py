@@ -39,7 +39,8 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     'recipes.apps.RecipesConfig',
     'api.apps.ApiConfig',
-    'users.apps.UsersConfig'
+    'users.apps.UsersConfig',
+    'colorfield'
 ]
 
 MIDDLEWARE = [
@@ -128,3 +129,9 @@ STATIC_URL = '/static/'
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 AUTH_USER_MODEL = 'users.User'
+
+
+MAX_LEN_FIELD = 200
+MAX_LEN_HEX_FIELD = 7
+MIN_COOKING_TIME = 1
+MIN_AMOUNT_INGR = 1
