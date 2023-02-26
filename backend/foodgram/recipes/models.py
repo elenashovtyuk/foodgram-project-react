@@ -139,10 +139,10 @@ class Recipe(models.Model):
     cooking_time = models.IntegerField(
         'Время приготовления (мин)',
         validators=(
-          MinValueValidator(
-              settings.MIN_COOKING_TIME,
-              message='Минимально допустимое значение - 1 минута!',
-          ),
+            MinValueValidator(
+                settings.MIN_COOKING_TIME,
+                message='Минимально допустимое значение - 1 минута!',
+            ),
         )
     )
 
