@@ -1,3 +1,5 @@
+from django.contrib.auth.password_validation import validate_password
+from django.core import exceptions as django_exceptions
 from recipes.models import (Ingredient, Tag, Recipe)
 from rest_framework import serializers
 from rest_framework.fields import SerializerMethodField
@@ -14,10 +16,12 @@ from users.models import User
 # /token/logout/
 
 # для обработки этих эндпоинтов djoser по умолчанию использует
-# свои собственные сериализаторы и вьюсеты. Если не переопределять сериализаторы, то
+# свои собственные сериализаторы и вьюсеты.
+# Если не переопределять сериализаторы, то
 # будут по умолчанию применены сериализаторы из библиотеки djoser,
 # созданные для сериализации базовой модели User.
-# В нашем случае это не подходит, так как у нас используется не базовая модель User.
+# В нашем случае это не подходит, так как у нас используется
+# не базовая модель User.
 # Мы создавали собственную кастомную модель User на основе AbstractUser и
 # поэтому и сериализаторы для этой модели прописываем самостоятельно.
 
@@ -30,9 +34,10 @@ from users.models import User
 # Для обработки эндпоинта /users/me/ также пишем свой сериализатор.
 
 # Остальные сериализаторы для обработки эндпоинтов /users/set_password/,
-# /token/login/, /token/logout/ мы не пишем - используем их по умолчанию из библиотеки djoser.
+# /token/login/, /token/logout/ мы не пишем -
+# используем их по умолчанию из библиотеки djoser.
 
-# После создания сериализаторов указываем их в settings.py в настройках для Djoser.
+# После создания сериализаторов указываем их в settings.py для Djoser.
 
 
 # 1-ый сериализатор - для обработки запроса по эндпоинту /users/ -
@@ -41,8 +46,10 @@ from users.models import User
 class ReadUserSerializer(serializers.ModelSerializer):
     """[GET] Сериализатор для модели пользователя(только для чтения)."""
 
-    # для поля is_subscribed указываем типом поля сериализатор SerializerMethodField,
-    # так как это поле новое - его нет у модели User, но мы должны получить его на выходе
+    # для поля is_subscribed указываем типом поля
+    # сериализатор SerializerMethodField,
+    # так как это поле новое - его нет у модели User,
+    # но мы должны получить его на выходе
     # то есть, должна быть информация о подписках
     is_subscribed = serializers.SerializerMethodField()
 
@@ -76,6 +83,71 @@ class CreateUserSerializer(serializers.ModelSerializer):
             'last_name',
             'password'
         )
+
+
+# создаем сериализатор для смены пароля -
+# наследник от Serializer(сериализатор,
+# который работает с обычными классами, а не с моделями)
+# В этом сериализаторе все поля нужно задавать вручную.
+# у нас их два - текущий и новый пароли
+class SetPasswordSerializer(serializers.Serializer):
+    new_password = serializers.CharField()
+    current_password = serializers.CharField()
+    # НУЖНО СДЕЛАТЬ ВАЛИДАЦИЮ, ЧТО НОВЫЙ ПАРОЛЬ ВЕРНЫЙ И
+    #  ЧТО ОН ОТЛИЧЕН ОТ ТЕКУЩЕГО ПАРОЛЯ
+    # Валидация может быть на уровне поля и на уровне объекта
+    # если требуется осуществить проверку, затрагивающую несколько полей,
+    # то тут следует применить ВАЛИДАЦИЮ НА УРОВНЕ ОБЪЕКТА
+    # для этого указываем следующий метод
+
+    def validate(self, data):
+        # этот метод принимает на вход один единственный аргумент - data
+        # словарь значений полей(т.е полей new_password, current_password)
+        # для проверки валидации в django.contrib.auth.password_validate
+        # существует несколько функций, которые можно вызвать для интеграции
+        # проверки пароля в своем коде.
+        # используем конструкцию try-except
+        # в блок try поместим функцию, которую проверяет пароль
+        # (это одна из полезных функций для интеграции валидации из
+        # django.contrib.auth.password_validate)
+        # в аргументах передаем пароль, который нужно проверить
+        # используя обращение по ключу словаря data
+        try:
+            validate_password(data['new_password'])
+        # если проверка идет в штатном режиме, то блок except будет пропущен
+        # если же возникает любое исключение,
+        # то управление передается в блок except
+        except django_exceptions.ValidationError as password_error:
+            # в случае какой-то неотработанной ошибки  выбросить raise
+            raise serializers.ValidationError(
+                {'new_password': list(password_error.messages)}
+            )
+        return super().validate(data)
+
+    # Далее необходимо указать метод def update
+    # для того, чтобы расширить функционал и
+    # иметь возможность изменять существующий пароль
+    # В этот метод передается ссылка instance на объект, который следует
+    # изменить(у нас это current_password) и словарь validated_data
+    # с проверенными данными.(полученные выше в методе def validate)
+    def update(self, instance, validated_data):
+        # используем функцию check_password из
+        if not instance.check_password(validated_data['current_password']):
+            raise serializers.ValidationError(
+                {'current_password': 'Неправильный пароль.'}
+            )
+        # берем из словаря validated_data по ключу данные:
+        # current_password(текущий пароль) и по ключу new_password
+        # (новый пароль).
+        # сравниваем эти значени и если они равны, то возвращаем исключение
+        if (validated_data['current_password']
+           == validated_data['new_password']):
+            raise serializers.ValidationError(
+                {'new_password': 'Новый пароль должен отличаться от текущего.'}
+            )
+        instance.set_password(validated_data['new_password'])
+        instance.save()
+        return validated_data
 
 
 # ГОТОВО
@@ -128,7 +200,8 @@ class ReadRecipeSerializer(serializers.ModelSerializer):
     # т.е при GET-запросе рецепта будет получен id автора
     # это не информативно, нам необходимо получить строковое представление.
     # поэтому нам необходимо переопределить тип этого поля
-    # Для этого сначала необходимо написать сериализатор для модели User(для чтения)
+    # Для этого сначала необходимо написать сериализатор для модели User
+    # (для чтения)
     # и применить его в качестве типа поля для author в нашем,
     # родительском сериализаторе.
     # То есть, теперь это поле будет возвращать объекты модели User,
@@ -142,9 +215,11 @@ class ReadRecipeSerializer(serializers.ModelSerializer):
     # Для этого используем созданный ранее сериализатор для модели Tag.
     # Применяем его в качестве типа поля tags и теперь
     # это поле будет возвращать объекты модели Tag,
-    # сериализованные в TagSerializer - то есть, эти данные вернутся в виде JSON.
+    # сериализованные в TagSerializer - то есть,
+    # эти данные вернутся в виде JSON.
 
-    # 3. Модель Recipe связана с моделью Ingredient ч/з поле ingredients(ManyToManyField).
+    # 3. Модель Recipe связана с моделью Ingredient ч/з поле ingredients
+    # (ManyToManyField).
     # Если мы не переопределим тип этого поля в сериализаторе,
     # то запрашивая рецепт, мы также получим список id ингредиентов
     # а не список самих ингредиентов. Необходимо переопределить тип поля.
@@ -161,15 +236,16 @@ class ReadRecipeSerializer(serializers.ModelSerializer):
     # когда во время сериализации определенного поля требуется запустить
     #  какой-то свой код для того, чтобы получить значение этого поля.
     # Также часто при работе с апи требуется в ответе вернуть те поля,
-    # которых нет в сериализуемой модели(как раз этих двух полей нет в модели Recipe).
-    # То есть, с помощью SerializerMethodField можно модифицировать существующее поле
+    # которых нет в сериализуемой модели
+    # (как раз этих двух полей нет в модели Recipe).
+    # То есть, с помощью SerializerMethodField можно модифицировать
+    # существующее поле
     # (например произвести какие-то вычисления с ним)
     # или создать новое поле(наш случай с этими 2 полями).
     # при запросе рецепта по этим двум полям должно вернуться булево значение
     # предварительно импортируем этот тип поля из rest-framework.fields.
     # Когда полю присвоен тип SerializerMethodField,
     # то DRF вызывает метод с именем def get <имя этого поля>
-
 
     # ИТОГ
     # для 3-ех полей сериализатора ReadRecipeSerializer
@@ -187,7 +263,6 @@ class ReadRecipeSerializer(serializers.ModelSerializer):
 
     def get_ingredients(self, obj):
         """Выполняет вычисление кол-ва ингредиентов."""
-
 
     def get_is_favorite(self, obj):
         """Проверяет, добавил ли пользователь рецепт в избранное."""
