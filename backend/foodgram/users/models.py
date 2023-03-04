@@ -12,20 +12,20 @@ class User(AbstractUser):
     """Модель пользователя."""
     # создаем поля, сверяя с исходным кодом класса AbstractUser
     # проверяя соответствие требованиям ТЗ(redoc)
-    # поля first_name и last_name не указываем явно - так как они
-    # полностью соответствуют полям родительской модели - AbstractUser
+
     email = models.EmailField(
         verbose_name='Адрес электронной почты',
         max_length=254,
         unique=True,
-        default='default_email'
+        # default='default_email'
 
     )
     username = models.CharField(
         verbose_name='Уникальный юзернэйм',
         max_length=settings.MAX_LEN_FIELD_USER,
         unique=True,
-        default='default_username',
+        # default='default_username',
+
         validators=(
             RegexValidator(
                 regex=r'^[\w.@+-]+\Z',
@@ -45,8 +45,10 @@ class User(AbstractUser):
     password = models.CharField(
         verbose_name='Пароль пользователя',
         max_length=settings.MAX_LEN_FIELD_USER,
-        default='default_password'
+        # default='default_password'
     )
+    USERNAME_FIELD = 'email'
+    REQUIRED_FIELDS = ('username', 'first_name', 'last_name',)
 
     class Meta:
         ordering = ['id']
