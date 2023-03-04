@@ -1,4 +1,4 @@
-from django.urls import include, path
+from django.urls import include, path, re_path
 from rest_framework.routers import DefaultRouter
 # импортируем все вьюсеты из нашего приложения api
 from .views import IngredientViewSet, RecipeViewSet, TagViewSet, UserViewSet
@@ -25,5 +25,6 @@ router.register(r'recipes', RecipeViewSet, basename='recipes')
 # все зарегистрированные в routers пути доступны в router.urls
 urlpatterns = [
     path('', include(router.urls)),
-    path(r'auth/', include('djoser.urls.authtoken'))
+    path(r'auth/', include('djoser.urls')),
+    re_path(r'^auth/', include('djoser.urls.authtoken'))
 ]
