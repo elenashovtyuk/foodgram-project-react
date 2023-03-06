@@ -1,15 +1,17 @@
 # from django.shortcuts import render
 # from django.http import HttpResponse
+from django.shortcuts import get_object_or_404
 from recipes.models import Ingredient, Recipe, Tag
 from rest_framework import viewsets, mixins, status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.decorators import action
 from rest_framework.response import Response
-from users.models import User
+from users.models import User, Subscription
 
 from .serializers import (CreateUserSerializer, IngredientSerializer,
                           ReadRecipeSerializer, ReadUserSerializer,
-                          TagSerializer, SetPasswordSerializer)
+                          TagSerializer, SetPasswordSerializer,
+                          SubscriptionSerialiser, SubscribeSerialiser)
 
 
 # для создания вьюсета для модели User нужно определиться с функционалом
@@ -100,20 +102,107 @@ class UserViewSet(mixins.CreateModelMixin,
             return Response({'detail': 'Пароль успешно изменен!'},
                             status=status.HTTP_204_NO_CONTENT)
 
-    @action(detail=False,
+    # при поступлении GET-запроса для получения текущего пользователя
+    # этот запрос поступает в UserViewSet в метод def me,
+    # обернутый в декоратор action для маршрутизации нестандартных действий.
+    # при поступлении GET-запроса происходит сериализация, в ходе которой
+    # пользователь получает данные в формате JSON о текущем пользователе.
+    # по умолчанию в UserViewSet Djoser-а этот метод отрабатывает несколько
+    # типов запроса.
+    # Нам нужен только GET, поэтому указываем его в парамметре methods
+    # pagination_class = None отключает пагинацию в этом представлении
+    # также укажем permission_classes только для авторизованных пользователей
+    @action(detail=False, methods=['get'],
+            pagination_class=None,
             permission_classes=(IsAuthenticated,))
     def me(self, request):
-        pass
+        # сериадлизуем данные пользователя из запроса(request.user)
+        serializer = ReadUserSerializer(request.user)
+        # возвращаем пользователю сериализованные данные в формате JSON
+        return Response(serializer.data,
+                        status=status.HTTP_200_OK)
 
-    @action(detail=False,
+    # следующий метод для получения своих подписок
+    # запрос может сделать только авторизованный пользователь
+    # поэтому указываем permissions=IsAuthenticated
+    # так как этот метод будет работать с коллекцией объектов, то
+    # указываем detail=False
+    # также укажем, что этот метод только GET-запросы отрабатывает
+    @action(detail=False, methods=['get'],
             permission_classes=(IsAuthenticated,))
     def subscriptions(self, request):
-        pass
+        # выборка пользователей, на которых подписан пользователь из запроса
+        queryset = User.objects.filter(subscribing__user=request.user)
+        # метод paginate_queryset применяется к полученной выборке
+        # и возвращает итерируемый объект
+        page = self.paginate_queryset(queryset)
+        # дальше создаем экземпляр сериализатора и передаем  в него следующее:
+        # page - итерируемый объект, полученный ранее -
+        # это выборка пользователей
+        # чтобы сериализовать не один объект, а выборку(коллекцию),
+        # укажем параметр many=True
+        serializer = SubscriptionSerialiser(page, many=True,
+                                            context={'request': request})
+        # метод get_paginated передается сериализованным данным страницы
+        # возвращает объект Response
+        return self.get_paginated_response(serializer.data)
 
+    # следующий метод для подписки на автора или отписки от него
+    # указываем параметр detail=True, так как этот метод предназначен
+    # для работы с одним объектом
+
+    # (подписка/отписка по отношению к одному конкретному автору)
+    # далее укажем параметр methods и укажем методы запроса явно,
+    #  т.к по умолчанию декоратор action предусматривает только GET-запросы
+
+    # также укажем параметр permission_classes,
+    #  так как это действие может выполнять только авторизованный пользователь
     @action(detail=True, methods=('post', 'delete'),
             permission_classes=(IsAuthenticated,))
-    def subscribe(self, request):
-        pass
+    # в параметры метода передаем id автора,
+    # так как этот параметр нам нужен при получении автора
+    def subscribe(self, request, **kwargs):
+        """Метод для подписки на определенного автора или отписки."""
+        # первое, что нужно сделать -
+        # это получить конкретного автора рецепта по его id,
+        # чтобы далее уже можно в зависимости от типа запроса
+        # подписаться на него или отписаться
+        author = get_object_or_404(User, id=kwargs['pk'])
+        # пользователя, подписавшегося на автора получаем из запроса
+        # request.user
+        # далее прописываем логику действий в зависимости от типа запроса
+        if request.method == 'POST':
+            # если метод POST, то необходима десериализация данных
+            # cоздаем экземпляр сериализатора SubscribeSerializer
+            # в параметрах передаем  в него объект автора полученного ранее,
+            # а также данные из запроса request.data
+            # request.data содержит словарь со всеми данными из запроса
+            serializer = SubscribeSerialiser(
+                author, data=request.data)
+            # далее проверяем валидность полученных данных
+            serializer.is_valid(raise_exception=True)
+            # в случае валидности создаем экземпляр подписки
+            Subscription.objects.create(
+                user=request.user,
+                author=author,
+                context={"request": request})
+            # вью-функция должна возвращать объект Response,
+            # которому передаются сериализованные данные(это JSON)
+            return Response(serializer.data,
+                            status=status.HTTP_201_CREATED)
+
+        # если метод DELETE, то мы запрашиваем экземпляр подписки,
+        # для которого подписчик - это пользователь из запроса,
+        # а автор - это автор, полученный выше по конкретному id
+        # (тот автор,которого нужно удалить из подписки).
+        # Далее применяем метод delete к полученному экземпляру.
+        # если указанный экземпляр не будет найден, то вернется 404.
+        if request.method == 'DELETE':
+            get_object_or_404(Subscription, user=request.user,
+                              author=author).delete()
+            # дальше мы должны вернуть сообщение об успешной отписке
+            return Response({'detail': 'Успешная отписка'},
+                            status=status.HTTP_204_NO_CONTENT)
 
 
 # ЧАСТИЧНО ГОТОВО
