@@ -3,7 +3,7 @@ from django.core import exceptions as django_exceptions
 from recipes.models import (Ingredient, Tag, Recipe)
 from rest_framework import serializers
 from rest_framework.fields import SerializerMethodField
-from users.models import User
+from users.models import User, Subscription
 
 
 # момент с аутентификацией решаем с помощью библиотеки djoser.
@@ -64,7 +64,6 @@ class ReadUserSerializer(serializers.ModelSerializer):
             'username',
             'first_name',
             'last_name',
-            'password',
             'is_subscribed'
         )
 
@@ -85,6 +84,15 @@ class CreateUserSerializer(serializers.ModelSerializer):
         user.save()
         return user
 
+    def validate(self, obj):
+        invalid_usernames = ['me', 'set_password',
+                             'subscriptions', 'subscribe']
+        if self.initial_data.get('username') in invalid_usernames:
+            raise serializers.ValidationError(
+                {'username': 'Вы не можете использовать этот username.'}
+            )
+        return obj
+
     class Meta:
         model = User
         fields = (
@@ -94,6 +102,11 @@ class CreateUserSerializer(serializers.ModelSerializer):
             'last_name',
             'password'
         )
+        extra_kwargs = {
+            'first_name': {'required': True, 'allow_blank': False},
+            'last_name': {'required': True, 'allow_blank': False},
+            'email': {'required': True, 'allow_blank': False},
+        }
 
 
 # создаем сериализатор для смены пароля -
@@ -338,3 +351,118 @@ class ReadRecipeSerializer(serializers.ModelSerializer):
 #     class Meta:
 #         model = ShoppingCart
 #         fields = ('user', 'recipe', 'add_date')
+
+
+# создаем сериализатор для подписок, ДЛЯ ЧТЕНИЯ
+class SubscriptionSerialiser(serializers.ModelSerializer):
+    """
+    [GET] Сериализатор для получения списка авторов,
+    на которых подписан пользователь.
+    """
+    # в классе Meta укажем модель для которой создан сериализатор
+    # и явно указываем все поля, которые нужно сериализовать - те поля,
+    # которые в формате JSONдолжны вернуться пользователю согласно redoc
+    # для некоторых полей необходимо указать SerializerMethodField, так как
+    # в ответе требуется вернуть те поля, которых нет в сериализуемой модели
+    # это следующие поля - 'is_subscribed'(подписан ли автор, булево значение),
+    # 'recipes'(список рецептов от тех авторов, на кого подписан пользователь),
+    # 'recipes_count'(кол-во рецептов в подписках).
+    # с помощью SerializerMethodField можно модифицировать
+    # существующее поле
+    # (например произвести какие-то вычисления с ним)
+    # или создать новое поле(наш случай с этими 3 полями).
+    # переопределяем эти три поля, указыввем тип поля SerializerMethodField
+    # Когда полю присвоен тип SerializerMethodField,
+    # то DRF вызывает метод с именем def get <имя этого поля>
+
+    is_subscribed = SerializerMethodField()
+    recipes = SerializerMethodField()
+    recipes_count = SerializerMethodField()
+
+    def get_is_subscribed(self, obj):
+        """Проверяет - подписан ли пользователь на указанного автора."""
+    # obj - это объект сериализации, экземпляр класса User
+    # Этот метод сгласно тз должен вернуть True,
+    # если данный автор есть в подписках пользователя,
+    # или False - если не содержит.
+    # То есть, если экземпляр класса Subscriptions в качестве user
+    # имеет request.user(пользователя из запроса)
+    # а в качестве author имеет obj - сериализуемый объект, то будет True
+    # юзера из запроса не можем получить напрямую,
+    # сначала нужно получить объект запроса, а из него уже извлечь юзера
+        return (Subscription.objects.filter(
+                user=self.context['request'].user, author=obj))
+
+    def get_recipes(self, obj):
+        """Возвращает список рецептов в подписках."""
+        pass
+
+    def get_recipes_count(self, obj):
+        """Возвращает кол-во рецептов в подписках."""
+        return obj.recipes.count()
+
+    class Meta:
+        model = User
+        fields = ('email', 'id', 'username', 'first_name',
+                  'last_name', 'is_subscribed',
+                  'recipes', 'recipes_count')
+
+
+# создаем сериализатор для записи - для подписок/отписок
+class SubscribeSerialiser(serializers.ModelSerializer):
+    """[POST],[DELETE] Сериализатор для подписки/ отписки."""
+    # как видим, не все поля, которые мы указываем
+    # в Meta(cогласно redoc) есть в модели.
+    # это следующие поля -
+    # 'is_subscribed'(подписан ли автор, булево значение),
+    # 'recipes'(список рецептов от тех авторов, на кого подписан пользователь),
+    # 'recipes_count'(кол-во рецептов в подписках).
+    # с помощью SerializerMethodField можно создать новое поле
+    # (наш случай с этими 3 полями).
+    # Для этих 3-ех полей указыввем тип поля SerializerMethodField.
+    # Когда полю присвоен тип SerializerMethodField,
+    # то DRF вызывает метод с именем def get <имя этого поля>
+    is_subscribed = SerializerMethodField()
+    recipes = SerializerMethodField()
+    recipes_count = SerializerMethodField()
+
+    def validate(self, obj):
+        if (self.context['request'].user == obj):
+            raise serializers.ValidationError(
+                {'errors': 'Ошибка подписки. Нельзя подписаться на себя.'})
+        return obj
+
+    def get_is_subscribed(self, obj):
+        """Проверяет - подписан ли пользователь на указанного автора."""
+        # obj - это объект сериализации, экземпляр класса User
+        # Этот метод сгласно тз должен вернуть True,
+        # если данный автор есть в подписках пользователя,
+        # или False - если не содержит.
+        # То есть, если экземпляр класса Subscriptions в качестве user
+        # имеет request.user(пользователя из запроса)
+        # а в качестве author имеет obj - сериализуемый объект, то будет True
+        # юзера из запроса не можем получить напрямую,
+        # сначала нужно получить объект запроса, а из него уже извлечь юзера
+        self.context.get('request').user.is_authenticated
+        return (Subscription.objects.filter(
+                user=self.context['request'].user, author=obj))
+
+    # def get_recipes(self, obj):
+    #     """Возвращает список рецептов в подписках."""
+    #     pass
+
+    def get_recipes_count(self, obj):
+        """Возвращает кол-во рецептов в подписках."""
+        return obj.recipes.count()
+
+    class Meta:
+        # указываем модель, для которой нужна сериализаци/десериализация данных
+        model = User
+        # также указываем поля, которые должны быть сериализованы
+        # перечисляем их явно
+        fields = (
+            'email', 'id', 'username',
+            'first_name', 'last_name',
+            'is_subscribed', 'recipes',
+            'recipes_count'
+        )
