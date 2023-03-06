@@ -1,4 +1,4 @@
-from django.urls import include, path, re_path
+from django.urls import include, path
 from rest_framework.routers import DefaultRouter
 # импортируем все вьюсеты из нашего приложения api
 from .views import IngredientViewSet, RecipeViewSet, TagViewSet, UserViewSet
