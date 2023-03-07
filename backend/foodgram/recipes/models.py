@@ -137,7 +137,7 @@ class Recipe(models.Model):
     # поле время приготовления должно быть положительным числовым значением
     # для того чтобы проверить поле на соответствие минимальному значению
     # используем встроенный валидатор
-    cooking_time = models.IntegerField(
+    cooking_time = models.PositiveSmallIntegerField(
         'Время приготовления (мин)',
         validators=(
             MinValueValidator(
