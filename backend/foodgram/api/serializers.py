@@ -1,10 +1,11 @@
 from django.contrib.auth.password_validation import validate_password
 from django.core import exceptions as django_exceptions
-from recipes.models import (Ingredient, Tag, Recipe)
+from drf_base64.fields import Base64ImageField
+from recipes.models import (Favorite, Ingredient, Recipe, RecipeIngredient,
+                            ShoppingCart, Tag)
 from rest_framework import serializers
 from rest_framework.fields import SerializerMethodField
-from users.models import User, Subscription
-from drf_base64.fields import Base64ImageField
+from users.models import Subscription, User
 
 # момент с аутентификацией решаем с помощью библиотеки djoser.
 
@@ -211,7 +212,32 @@ class TagSerializer(serializers.ModelSerializer):
         model = Tag
         fields = ('id', 'name', 'color', 'slug')
 
+# ГОТОВО
+class RecipeIngredientSerializer(serializers.ModelSerializer):
+    """Сериализатор для промежуточной модели RecipeIngredient."""
+    # так как на выходе мы должны получить поля,
+    #  отличные от тех, что в исходной модели
+    # то укажем в классе Meta в fields поля в нужном виде,
+    # а сами поля, которые нужно изменить - переопределим выше
+    # укажем эти поля с типом ReadOnly и в аттрибутах укажем source
+    # id - id ингредиента
+    # name - name ингредиента
+    # mesurement_unit - ед.измерения ингредиента
+    # то есть, данные из связанной модели Ingredients
 
+    id = serializers.PrimaryKeyRelatedField(
+        source='id',
+        queryset=Ingredient.objects.all()
+    )
+    name = serializers.ReadOnlyField(source='ingredient.name')
+    measurement_unit = serializers.ReadOnlyField(
+        source='ingredient.measurement_unit')
+
+    class Meta:
+        model = RecipeIngredient
+        fields = ('id', 'name', 'measurement_unit' 'amount')
+
+# ГОТОВО
 class ReadRecipeSerializer(serializers.ModelSerializer):
     """[GET]Сериализатор для модели рецептов(только для чтения)."""
     # Этот сериализатор нужно прорабатывать более детально,
@@ -281,32 +307,61 @@ class ReadRecipeSerializer(serializers.ModelSerializer):
 
     author = ReadUserSerializer(read_only=True)
     tags = TagSerializer(many=True, read_only=True)
-    ingredients = SerializerMethodField()
+    ingredients = RecipeIngredientSerializer(many=True, read_only=True)
     is_favorite = SerializerMethodField()
     is_in_shopping_cart = SerializerMethodField()
+    image = Base64ImageField()
 
-    def get_ingredients(self, obj):
-        """Выполняет вычисление кол-ва ингредиентов."""
-
-    def get_is_favorite(self, obj):
+    def get_is_favorited(self, obj):
         """Проверяет, добавил ли пользователь рецепт в избранное."""
-        pass
+        # obj - это объект сериализации, экземпляр класса Recipe
+        # Этот метод соглсно тз должен вернуть True,
+        # если данный рецепт есть в избранном у пользователя из запроса
+        # и False, если его нет в избранном пользователя
+        # т.е если экземпляр класса Favorite в качестве user содержит
+        # пользователя из запроса(request.user)
+        # а в качестве рецепта - obj, то вернется True
+        # получить юзера из запроса напрямую мы не можем,
+        # получим сначала объект запроса, а потом из него извлечем юзера
+        request = self.context.get('request')
+        return (
+            request.user.is_authenticated
+            and (Favorite.objects.filter(
+                user=request.user, recipe=obj).exists())
+        )
 
     def get_is_in_shopping_cart(self, obj):
         """Проверяет, добавил ли пользователь рецепт в список покупок."""
-        pass
+        # obj - объект сериализации, экземпляр класса Recipe
+        # Этот метод согласно тз должен вернуть True,
+        # если этот рецепт есть в списке покупок пользователя
+        # т.е если экземпляр класса ShoppingCart содержаит в кач-ве user
+        # пользователя из запроса(request.user)
+        # а в качестве recipe - obj, то вернется True
+        # получить юзера из запроса напрямую мы не можем,
+        # получим сначала объект запроса, а потом из него извлечем юзера
+        request = self.context.get('request')
+        return (
+            request.user.is_authenticated
+            and ShoppingCart.objects.filter(
+                user=request.user, recipe=obj).exists())
 
     class Meta:
         # укажем модель
         model = Recipe
         # укажем поля, для которых необходима сериализация
-        # часть этих полей выше будем переопределять
+        # часть этих полей выше будем переопределять -
+        # так как их нет в модели, для которой написан сериализатор.
+        # Для этого назначим этим полям тип поля - SerializerMethodField
+        # когда этим полям будет присвоен указанный тип поля,
+        # то DRF вызовет метод
+        # def get <имя_поля>
         fields = (
             'id',
             'tags',
             'author',
             'ingredients',
-            'is_favorite',
+            'is_favorited',
             'is_in_shopping_cart',
             'name',
             'image',
@@ -315,21 +370,30 @@ class ReadRecipeSerializer(serializers.ModelSerializer):
         )
 
 
-# class CreateRecipeSerializer(serializers.ModelSerializer):
-#     """Сериализатор для модели рецептов(для записи)."""
-#     author = serializers.StringRelatedField()
+class CreateRecipeSerializer(serializers.ModelSerializer):
+    """[POST], [PATCH], [DELETE]
+    Сериализатор для модели рецептов(для записи, изменения и удаления).
+    """
 
-#     class Meta:
-#         model = Recipe
-#         fields = (
-#             'author',
-#             'tags',
-#             'ingredients',
-#             'name',
-#             'image',
-#             'text',
-#             'cooking_time'
-#         )
+
+    # в классе Мета указываем модель
+    # и явно указываем все поля, для которых нужна сериализация
+    # при пост-запросе данные поступают в формате  JSON и
+    # преобразуются в простые типы данных Python.
+    # в процессе добавляется валидация
+    # JSON -> простые типы данных Python -> валидация -> конвертация в сложный объект
+    # в экземпляр модели Recipe
+    class Meta:
+        model = Recipe
+        fields = (
+            'id',
+            'ingredients',
+            'tags',
+            'image',
+            'name',
+            'text',
+            'cooking_time'
+        )
 
 
 # class RecipeIngredientSerializer(serializers.ModelSerializer):
@@ -412,23 +476,14 @@ class SubscriptionSerialiser(serializers.ModelSerializer):
         # сначала получаем обект запроса и сохраняем его в переменной request
         request = self.context.get('request')
         # затем нужно извлечь параметры запроса - кол-во объектов на странице
-        page_size = request.GET.get('page_size')
+        limit = request.GET.get('recipes_limit')
         # obj- это объект сериализации, экземпляр модели User
         # получаем далее все рецепты пользователя
         # (автора, на которого подписываются)
         recipes = obj.recipes.all()
         # дальше нужно выполнить проверку
-        if page_size:
-            recipes = recipes[int:(page_size)]
-        serializer = RecipeSerializer(recipes, many=True, read_only=True)
-        return serializer.data
-
-    def get_recipes(self, obj):
-        request = self.context.get('request')
-        limit = request.GET.get('recipes_limit')
-        recipes = obj.recipes.all()
         if limit:
-            recipes = recipes[:int(limit)]
+            recipes = recipes[int:(limit)]
         serializer = RecipeSerializer(recipes, many=True, read_only=True)
         return serializer.data
 
@@ -463,12 +518,6 @@ class SubscribeSerialiser(serializers.ModelSerializer):
     is_subscribed = SerializerMethodField()
     recipes = RecipeSerializer(many=True, read_only=True)
     recipes_count = SerializerMethodField()
-
-    # def validate(self, obj):
-    #     if (self.context['request'].user == obj):
-    #         raise serializers.ValidationError(
-    #             {'errors': 'Ошибка подписки. Нельзя подписаться на себя.'})
-    #     return obj
 
     def get_is_subscribed(self, obj):
         """Проверяет - подписан ли пользователь на указанного автора."""
