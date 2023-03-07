@@ -2,16 +2,18 @@
 # from django.http import HttpResponse
 from django.shortcuts import get_object_or_404
 from recipes.models import Ingredient, Recipe, Tag
-from rest_framework import viewsets, mixins, status
-from rest_framework.permissions import IsAuthenticated, AllowAny
+from rest_framework import mixins, status, viewsets
 from rest_framework.decorators import action
+from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
-from users.models import User, Subscription
+from users.models import Subscription, User
 
-from .serializers import (CreateUserSerializer, IngredientSerializer,
-                          ReadRecipeSerializer, ReadUserSerializer,
-                          TagSerializer, SetPasswordSerializer,
-                          SubscriptionSerialiser, SubscribeSerialiser)
+from .pagination import CustomPaginator
+from .serializers import (CreateRecipeSerializer, CreateUserSerializer,
+                          IngredientSerializer, ReadRecipeSerializer,
+                          ReadUserSerializer, SetPasswordSerializer,
+                          SubscribeSerialiser, SubscriptionSerialiser,
+                          TagSerializer)
 
 
 # для создания вьюсета для модели User нужно определиться с функционалом
@@ -125,11 +127,12 @@ class UserViewSet(mixins.CreateModelMixin,
     # следующий метод для получения своих подписок
     # запрос может сделать только авторизованный пользователь
     # поэтому указываем permissions=IsAuthenticated
-    # так как этот метод будет работать с коллекцией объектов, то
-    # указываем detail=False
+    # так как этот метод будет работать с коллекцией объектов,
+    # cо списком подписок, то указываем detail=False
     # также укажем, что этот метод только GET-запросы отрабатывает
     @action(detail=False, methods=['get'],
-            permission_classes=(IsAuthenticated,))
+            permission_classes=(IsAuthenticated,),
+            pagination_class=CustomPaginator)
     def subscriptions(self, request):
         # выборка пользователей, на которых подписан пользователь из запроса
         queryset = User.objects.filter(subscribing__user=request.user)
@@ -185,7 +188,6 @@ class UserViewSet(mixins.CreateModelMixin,
             Subscription.objects.create(
                 user=request.user,
                 author=author)
-                #context={"request": request})
             # вью-функция должна возвращать объект Response,
             # которому передаются сериализованные данные(это JSON)
             return Response(serializer.data,
@@ -253,6 +255,35 @@ class IngredientViewSet(viewsets.ReadOnlyModelViewSet):
     serializer_class = IngredientSerializer
 
 
+# для описания логики всех действий с ресурсом Рецепты создаем вьюсет
+# на основе ModelViewSet, так как этот класс включает весь список операций CRUD.
+# list, retrieve, create, update, destroy
 class RecipeViewSet(viewsets.ModelViewSet):
+    # дальше нужно указать 2 обязательных поля
+    # выборку объектов модели, с которыми будет работать вьюсет
+    # а также параметр serializer_class или get_serializer_class
+    # (для того, чтобы задать динамическое поведение -
+    # иметь возможность выбрать нужный сериализатор в зависимости от типа запроса)
     queryset = Recipe.objects.all()
-    serializer_class = ReadRecipeSerializer
+
+    def get_serializer_class(self):
+        if self.action in ('list', 'retrieve'):
+            return ReadRecipeSerializer
+        return CreateRecipeSerializer
+    # далее нестандартные действия, которые нужно сделать маршрутизируемыми.
+    # для таких действий можно написать отдельные действия задекорировать их
+    # @action - этот способ позволяет создать эндпоинты для этих действий
+    # 1-ый метод - скачать файл со списком покупок
+    @action()
+    def download_shopping_cart(self, request):
+        pass
+
+    # 2-ой метод - добавить рецепт в список покупок или удалить его из списка
+    @action()
+    def shopping_cart(self, request):
+        pass
+
+    # 3-ий метод - добавить рецепт в избранное или удалить из избранного
+    @action()
+    def favorite(self, request):
+        pass
