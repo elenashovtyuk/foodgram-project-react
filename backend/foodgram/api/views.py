@@ -3,7 +3,7 @@
 from django.shortcuts import get_object_or_404
 from recipes.models import Ingredient, Recipe, Tag
 from rest_framework import viewsets, mixins, status
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from users.models import User, Subscription
@@ -178,14 +178,14 @@ class UserViewSet(mixins.CreateModelMixin,
             # а также данные из запроса request.data
             # request.data содержит словарь со всеми данными из запроса
             serializer = SubscribeSerialiser(
-                author, data=request.data)
+                author, data=request.data, context={"request": request})
             # далее проверяем валидность полученных данных
             serializer.is_valid(raise_exception=True)
             # в случае валидности создаем экземпляр подписки
             Subscription.objects.create(
                 user=request.user,
-                author=author,
-                context={"request": request})
+                author=author)
+                #context={"request": request})
             # вью-функция должна возвращать объект Response,
             # которому передаются сериализованные данные(это JSON)
             return Response(serializer.data,
