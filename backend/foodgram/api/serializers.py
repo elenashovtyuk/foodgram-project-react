@@ -4,7 +4,7 @@ from recipes.models import (Ingredient, Tag, Recipe)
 from rest_framework import serializers
 from rest_framework.fields import SerializerMethodField
 from users.models import User, Subscription
-
+from drf_base64.fields import Base64ImageField
 
 # момент с аутентификацией решаем с помощью библиотеки djoser.
 
@@ -352,6 +352,17 @@ class ReadRecipeSerializer(serializers.ModelSerializer):
 #         model = ShoppingCart
 #         fields = ('user', 'recipe', 'add_date')
 
+class RecipeSerializer(serializers.ModelSerializer):
+    """Список рецептов без ингридиентов."""
+    image = Base64ImageField(read_only=True)
+    name = serializers.ReadOnlyField()
+    cooking_time = serializers.ReadOnlyField()
+
+    class Meta:
+        model = Recipe
+        fields = ('id', 'name',
+                  'image', 'cooking_time')
+
 
 # создаем сериализатор для подписок, ДЛЯ ЧТЕНИЯ
 class SubscriptionSerialiser(serializers.ModelSerializer):
@@ -390,12 +401,36 @@ class SubscriptionSerialiser(serializers.ModelSerializer):
     # а в качестве author имеет obj - сериализуемый объект, то будет True
     # юзера из запроса не можем получить напрямую,
     # сначала нужно получить объект запроса, а из него уже извлечь юзера
+        request = self.context.get('request')
+        if (request.user.is_anonymous) or (request.user == obj):
+            return False
         return (Subscription.objects.filter(
-                user=self.context['request'].user, author=obj))
+                user=request.user, author=obj).exists())
 
     def get_recipes(self, obj):
         """Возвращает список рецептов в подписках."""
-        pass
+        # сначала получаем обект запроса и сохраняем его в переменной request
+        request = self.context.get('request')
+        # затем нужно извлечь параметры запроса - кол-во объектов на странице
+        page_size = request.GET.get('page_size')
+        # obj- это объект сериализации, экземпляр модели User
+        # получаем далее все рецепты пользователя
+        # (автора, на которого подписываются)
+        recipes = obj.recipes.all()
+        # дальше нужно выполнить проверку
+        if page_size:
+            recipes = recipes[int:(page_size)]
+        serializer = RecipeSerializer(recipes, many=True, read_only=True)
+        return serializer.data
+
+    def get_recipes(self, obj):
+        request = self.context.get('request')
+        limit = request.GET.get('recipes_limit')
+        recipes = obj.recipes.all()
+        if limit:
+            recipes = recipes[:int(limit)]
+        serializer = RecipeSerializer(recipes, many=True, read_only=True)
+        return serializer.data
 
     def get_recipes_count(self, obj):
         """Возвращает кол-во рецептов в подписках."""
@@ -422,15 +457,18 @@ class SubscribeSerialiser(serializers.ModelSerializer):
     # Для этих 3-ех полей указыввем тип поля SerializerMethodField.
     # Когда полю присвоен тип SerializerMethodField,
     # то DRF вызывает метод с именем def get <имя этого поля>
+    email = serializers.ReadOnlyField()
+    username = serializers.ReadOnlyField()
+
     is_subscribed = SerializerMethodField()
-    recipes = SerializerMethodField()
+    recipes = RecipeSerializer(many=True, read_only=True)
     recipes_count = SerializerMethodField()
 
-    def validate(self, obj):
-        if (self.context['request'].user == obj):
-            raise serializers.ValidationError(
-                {'errors': 'Ошибка подписки. Нельзя подписаться на себя.'})
-        return obj
+    # def validate(self, obj):
+    #     if (self.context['request'].user == obj):
+    #         raise serializers.ValidationError(
+    #             {'errors': 'Ошибка подписки. Нельзя подписаться на себя.'})
+    #     return obj
 
     def get_is_subscribed(self, obj):
         """Проверяет - подписан ли пользователь на указанного автора."""
@@ -443,9 +481,11 @@ class SubscribeSerialiser(serializers.ModelSerializer):
         # а в качестве author имеет obj - сериализуемый объект, то будет True
         # юзера из запроса не можем получить напрямую,
         # сначала нужно получить объект запроса, а из него уже извлечь юзера
-        self.context.get('request').user.is_authenticated
+        request = self.context['request']
+        if (request.user.is_anonymous) or (request.user == obj):
+            return False
         return (Subscription.objects.filter(
-                user=self.context['request'].user, author=obj))
+                user=request.user, author=obj).exists())
 
     # def get_recipes(self, obj):
     #     """Возвращает список рецептов в подписках."""
