@@ -180,7 +180,7 @@ class SetPasswordSerializer(serializers.Serializer):
 # эта модель простая, без связей.
 # Сериализатор для нее тоже будет простым.
 # В классе Meta указываем модель, для которой будет создан сериализатор
-# и ЯВНО указываем поля модели, для которых необходима сериализация.
+# и указываем все поля модели для сериализации.
 # Так как для модели Ingredient в апи-документации указан один тип запроса
 # - GET, то в конструктор сериализатора для модели ингредиента
 # поступает экземпляр модели Ingredient или queryset.
@@ -191,7 +191,7 @@ class IngredientSerializer(serializers.ModelSerializer):
     """[GET]Сериализатор для модели ингредиентов."""
     class Meta:
         model = Ingredient
-        fields = ('name', 'measurement_unit')
+        fields = '__all__'
 
 
 # ГОТОВО
@@ -199,7 +199,7 @@ class IngredientSerializer(serializers.ModelSerializer):
 # Это тожем простая модель, без связей.
 # сериализатор для нее тоже простой.
 # В классе Meta указываем модель, для которой будет создан сериализатор
-# и ЯВНО перечисляем поля, для которых необходима сериализация.
+# и указываем все поля для сериализации.
 # Так как для модели Tag в апи-документации указан только GET-запрос,
 # то в конструктор сериализатора для модели тега
 #  поступает экземпляр модели Tag.
@@ -210,7 +210,7 @@ class TagSerializer(serializers.ModelSerializer):
     """[GET]Сериализатор для модели тегов."""
     class Meta:
         model = Tag
-        fields = ('id', 'name', 'color', 'slug')
+        fields = '__all__'
 
 
 # ГОТОВО
@@ -236,7 +236,10 @@ class RecipeIngredientSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = RecipeIngredient
-        fields = ('id', 'name', 'measurement_unit' 'amount')
+        fields = ('id',
+                  'name',
+                  'measurement_unit'
+                  'amount')
 
 
 # ГОТОВО
@@ -309,7 +312,7 @@ class ReadRecipeSerializer(serializers.ModelSerializer):
     author = ReadUserSerializer(read_only=True)
     tags = TagSerializer(many=True, read_only=True)
     ingredients = RecipeIngredientSerializer(many=True, read_only=True)
-    is_favorite = SerializerMethodField()
+    is_favorited = SerializerMethodField()
     is_in_shopping_cart = SerializerMethodField()
     image = Base64ImageField()
 
@@ -394,13 +397,49 @@ class CreateRecipeSerializer(serializers.ModelSerializer):
     # для поля author выбираем типом поля ReadUserSerializer,
     # тогда в поле автор будут попадать уже сериализованные данные
     author = ReadUserSerializer(read_only=True)
-    # аналогично с тегами
-    tags = TagSerializer(many=True, read_only=True)
-    # для ингредиентов указываем типом поля сериализатор для промежуточной модели
-    ingredients = RecipeIngredientSerializer(many=True, read_only=True)
+    # для поля tags выбираем PrimaryKeyRelatedField,
+    # так как на выходе должен быть список id
+    tags = serializers.PrimaryKeyRelatedField(many=True,
+                                              queryset=Tag.objects.all())
+    # для ингредиентов указываем типом поля сериализатор
+    #  для промежуточной модели
+    ingredients = RecipeIngredientSerializer(many=True)
     is_favorite = SerializerMethodField()
     is_in_shopping_cart = SerializerMethodField()
     image = Base64ImageField()
+
+    # обязательный этап десериализации - это валидация данных
+    # валидация прошла успешно, т.е данные соответствуют модели
+    # то экземпляр рецепта будет создан и пользователю придет сообщение
+    # для валидации данных в сериализаторе нужно прописать метод def validate
+
+    # что в итоге должно быть провалидировано:
+    # заполнены все необходимые поля
+    # при создании рецепта должен быть указан хотя бы 1 тег
+    # при создании рецепта должен быть указан хотя бы 1 ингредиент
+    # ингредиенты -уникальны
+
+    def validate(self, obj):
+        for field in ['name', 'text', 'cooking_time']:
+            if not obj.get(field):
+                raise serializers.ValidationError(
+                    f'{field} - Обязательное для заполнения поле.'
+                )
+        if not obj.get('tags'):
+            raise serializers.ValidationError(
+                'Нужно указать минимум 1 тег.'
+            )
+        if not obj.get('ingredients'):
+            raise serializers.ValidationError(
+                'Нужно указать минимум 1 ингредиент.'
+            )
+        inrgedient_id_list = [item['id'] for item in obj.get('ingredients')]
+        unique_ingredient_id_list = set(inrgedient_id_list)
+        if len(inrgedient_id_list) != len(unique_ingredient_id_list):
+            raise serializers.ValidationError(
+                'Ингредиенты должны быть уникальными.'
+            )
+        return obj
 
     def get_is_favorited(self, obj):
         """Проверяет, добавил ли пользователь рецепт в избранное."""
@@ -435,21 +474,6 @@ class CreateRecipeSerializer(serializers.ModelSerializer):
             request.user.is_authenticated
             and ShoppingCart.objects.filter(
                 user=request.user, recipe=obj).exists())
-
-    # обязательный этап десериализации - это валидация данных
-    # валидация прошла успешно, т.е данные соответствуют модели
-    # то экземпляр рецепта будет создан и пользователю придет сообщение
-    # для валидации данных в сериализаторе нужно прописать метод def validate
-
-    # что в итоге должно быть провалидировано:
-    # при создании рецепта должен быть указан хотя бы 1 тег
-    # при создании рецепта должен быть указан хотя бы 1 ингредиент
-
-    def validate_tag(self, attrs):
-        pass
-
-    def validate_ingredient(self, attrs):
-        pass
 
     # задаем функцию, которая связывает ингредиенты и теги с рецептом
     # эту функцию обернем в декоратор @staticmethod
@@ -500,7 +524,27 @@ class CreateRecipeSerializer(serializers.ModelSerializer):
 
     # чтобы настроить корректное поведение при изменении рецепта
     # нужно переопределить метод def update()
+    # в этот метод нужно передать ссылку на объект,
+    # который нужно изменить(instance)
+    # а также словарь с проверенными данными(validated_data)
     def update(self, instance, validated_data):
+        # далее, используя ORM Django
+        # меняем локальные аттрибуты объекта instance
+        instance.name = validated_data.get('name', instance.name)
+        instance.image = validated_data.get('image', instance.image)
+        instance.text = validated_data.get('text', instance.text)
+        instance.cooking_time = validated_data.get(
+            'cooking_time', instance.cooking_time)
+        # tags = validated_data.pop('tags')
+        # ingredients = validated_data.pop('ingredients')
+
+
+
+        # сохраняем изменения и возвращаем объект instance
+        instance.save()
+        return instance
+
+
         pass
 
     class Meta:
@@ -515,15 +559,12 @@ class CreateRecipeSerializer(serializers.ModelSerializer):
             'text',
             'cooking_time',
             'is_favorite',
-            'is_in-shopping_cart'
+            'is_in-shopping_cart',
         )
 
+    def to_representation(self, instance):
+        pass
 
-# class RecipeIngredientSerializer(serializers.ModelSerializer):
-#     """Сериализатор для модели ингредиентов в составе рецепта."""
-#     class Meta:
-#         model = RecipeIngredient
-#         fields = ('recipe', 'ingredient', 'amount')
 
 
 # class FavoriteSerializer(serializers.ModelSerializer):
