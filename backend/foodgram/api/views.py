@@ -1,19 +1,20 @@
 # from django.shortcuts import render
 # from django.http import HttpResponse
+from django_filters.rest_framework import DjangoFilterBackend
 from django.shortcuts import get_object_or_404
-from recipes.models import Ingredient, Recipe, Tag
+from recipes.models import Ingredient, Recipe, Tag, Favorite, ShoppingCart
 from rest_framework import mixins, status, viewsets, filters
 from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework.response import Response
 from users.models import Subscription, User
-
+from .filters import RecipeFilter
 from .pagination import (CustomPaginator,)
 from .serializers import (CreateRecipeSerializer, CreateUserSerializer,
                           IngredientSerializer, ReadRecipeSerializer,
                           ReadUserSerializer, SetPasswordSerializer,
                           SubscribeSerialiser, SubscriptionSerialiser,
-                          TagSerializer)
+                          TagSerializer, RecipeSerializer)
 from .permissions import (IsAuthorOrReadOnly,)
 
 
@@ -36,6 +37,8 @@ class UserViewSet(mixins.CreateModelMixin,
     # выборку объектов модели, с которыми будет работать вьюсет
     # это все объекты модели пользователя
     queryset = User.objects.all()
+    permission_classes = (AllowAny,)
+    pagination_class = CustomPaginator
 
     # далее нужно или установить аттрибут serialiser_class
     # и указать сериализатор для модели
@@ -279,9 +282,17 @@ class RecipeViewSet(viewsets.ModelViewSet):
     # (для того, чтобы задать динамическое поведение -
     # иметь возможность выбрать нужный сериализатор в зав-ти от запроса)
     queryset = Recipe.objects.all()
+    # настраиваем права доступа на уровне представления
+    # используем свой кастомный перимшн
     permission_classes = (IsAuthorOrReadOnly, )
+    # настраиваем фильтрацию
+    filter_backends = (DjangoFilterBackend, )
+    filterset_class = RecipeFilter
+    # указываем возможные методы
     http_method_names = ['get', 'post', 'patch', 'create', 'delete']
 
+    # укажем метод get_serializer_class для выбора нужного сериализатора
+    # в зависимости от типа запроса
     def get_serializer_class(self):
         if self.action in ('list', 'retrieve'):
             return ReadRecipeSerializer
@@ -296,11 +307,100 @@ class RecipeViewSet(viewsets.ModelViewSet):
         pass
 
     # 2-ой метод - добавить рецепт в список покупок или удалить его из списка
-    @action(detail=True)
-    def shopping_cart(self, request):
-        pass
+    @action(detail=True, methods=['post', 'delete'],
+            permission_classes=(IsAuthenticated,))
+    def shopping_cart(self, request, **kwargs):
+        # для ресурса ShoppingCart возможны 2 типа запросов
+        # POST и DELETE
+        # при POST запросе определенный рецепт добавляем в список покупок
+        #  т.е создаем экземпляр модели ShoppingCart
+        # где user - пользователь из объекта запроса,
+        # recipe - конкретный рецепт из БД, выбранный по его id
+        # при DELETE-запросе определенный рецепт удаляется из списка покупок
+        # т.е выбирается и удаляется конкретный экземпляр модели ShoppingCart
+
+        # первое, что нужно сделать - получить конкретный рецепт по его id
+        # если такого нет в базе, то вернется ошибка 404
+        recipe = get_object_or_404(Recipe, id=kwargs['pk'])
+        # дальше в зависимости от типа запроса предпринимаются нужные действия
+        # по отношению к полученному рецепту
+        if request.method == 'POST':
+            # если метод POST, то необходим процесс десериалиции
+            # для этого создаем экземпляр сериализатора
+            serializer = RecipeSerializer(
+                recipe,
+                data=request.data,
+                context={'request': request}
+            )
+            # далее проверяем валидность полученных данных
+            # в случае валидности создаем экземпляр списка покупок
+            # нужно учесть, что данный рецепт возможно уже добавлен
+            # в список покупок, это нужно предварительно проверить.
+            # если такого рецепта у пользователя нет в списке,
+            # т.е нет такого экземпляра модели ShoppingCart, то мы его создаем
+            serializer.is_valid(raise_exception=True)
+            if not ShoppingCart.objects.filter(user=request.user,
+                                               recipe=recipe).exists():
+                ShoppingCart.objects.create(user=request.user, recipe=recipe)
+                # вью-функция должна возвращать объект Response,
+                # которому передаются сериализованные данные(это JSON)
+                # и статус выполнения операции
+                return Response(serializer.data,
+                                status=status.HTTP_201_CREATED)
+        if request.method == 'DELETE':
+            # если же метод запроса DELETE,
+            #  то нужно удалить указанный экземпляр списка покупок
+            # для этого опять же используем метод get_object_or_404
+            get_object_or_404(ShoppingCart(recipe=recipe,
+                                           user=request.user).delete())
+            return Response({'detail': 'Рецепт удален из списка покупок'},
+                            status=status.HTTP_204_NO_CONTENT)
 
     # 3-ий метод - добавить рецепт в избранное или удалить из избранного
-    @action(detail=True)
-    def favorite(self, request):
-        pass
+    @action(detail=True, methods=['post', 'delete'],
+            permission_classes=(IsAuthenticated,))
+    def favorite(self, request, **kwargs):
+        # возможны 2 типа запросов по ресурсу Избранное(Favorite)
+        # POST и DELETE
+        # при POST-запросе создаем новый экземпляр модели Favorite
+        # где user-пользователь из запроса (request.user)
+        # а recipe - конкретный рецепт, полученный по id с помощью метода
+        # get_object_or_404
+
+        # первое, что нужно сделать - получить конкретный рецепт по его id
+        # если такого нет в базе, то вернется ошибка 404
+        recipe = get_object_or_404(Recipe, id=kwargs['pk'])
+        # дальше в зависимости от типа запроса предпринимаются нужные действия
+        if request.method == 'POST':
+            # если метод POST, то необходим процесс десериалиции
+            # для этого создаем экземпляр сериализатора
+            serializer = RecipeSerializer(
+                recipe,
+                data=request.data,
+                context={'request': request}
+            )
+            # далее проверяем валидность полученных данных
+            # в случае валидности создаем экземпляр модели избранное.
+            # нужно учесть, что данный рецепт возможно уже добавлен в избранное
+            # это нужно проверить
+            # если такого рецепта у пользователя нет в избранном,
+            # т.е нет такого экземпляра модели Favorite, то мы его создаем
+            serializer.is_valid(raise_exception=True)
+            if not Favorite.objects.filter(user=request.user,
+                                           recipe=recipe).exists():
+                Favorite.objects.create(user=request.user, recipe=recipe)
+                # вью-функция должна возвращать объект Response,
+                # которому передаются сериализованные данные(это JSON)
+                return Response(serializer.data,
+                                status=status.HTTP_201_CREATED)
+            # в противном случае возвращаем ошибку.
+            return Response({'errors': 'Рецепт уже добавлен в избранное.'},
+                            status=status.HTTP_400_BAD_REQUEST)
+        if request.method == 'DELETE':
+            # если же метод запроса DELETE,
+            #  то нужно удалить указанный экземпляр избранного
+            # для этого опять же используем метод get_object_or_404
+            get_object_or_404(Favorite(recipe=recipe,
+                                       user=request.user).delete())
+            return Response({'detail': 'Рецепт удален из избранного'},
+                            status=status.HTTP_204_NO_CONTENT)
