@@ -2,20 +2,22 @@
 # from django.http import HttpResponse
 from django.shortcuts import get_object_or_404
 from recipes.models import Ingredient, Recipe, Tag
-from rest_framework import mixins, status, viewsets
+from rest_framework import mixins, status, viewsets, filters
 from rest_framework.decorators import action
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework.response import Response
 from users.models import Subscription, User
 
-from .pagination import CustomPaginator
+from .pagination import (CustomPaginator,)
 from .serializers import (CreateRecipeSerializer, CreateUserSerializer,
                           IngredientSerializer, ReadRecipeSerializer,
                           ReadUserSerializer, SetPasswordSerializer,
                           SubscribeSerialiser, SubscriptionSerialiser,
                           TagSerializer)
+from .permissions import (IsAuthorOrReadOnly,)
 
 
+# ГОТОВО
 # для создания вьюсета для модели User нужно определиться с функционалом
 # какой набор действий нас интересует.
 # ОСНОВНЫЕ ДЕЙСТВИЯ:
@@ -207,8 +209,10 @@ class UserViewSet(mixins.CreateModelMixin,
                             status=status.HTTP_204_NO_CONTENT)
 
 
-# ЧАСТИЧНО ГОТОВО
-class TagViewSet(viewsets.ReadOnlyModelViewSet):
+# ГОТОВО
+class TagViewSet(mixins.ListModelMixin,
+                 mixins.RetrieveModelMixin,
+                 viewsets.GenericViewSet):
     """
     Получение списка тегов и конкретного тега по его id.
     """
@@ -216,11 +220,9 @@ class TagViewSet(viewsets.ReadOnlyModelViewSet):
     # зарегистрированными в роутере
     # router_v1.register('tags', TagViewSet, basename='tags').
     # Этот вюсет должен обрабатывать только GET-запросы:
-    # 1. получение списка тегов
-    # 2. получение конкретного тега по его идентификатору
-    # выбираем для создания вьюсета класс ReadOnlyViewSet
-    # Таким образом мы в одном вьюсете можем объединить 2 класса
-    # TagList и TagDetail(действия list, retrieve)
+    # 1. получение списка тегов(list)
+    # 2. получение конкретного тега по его идентификатору(retriev)
+    # выбираем для создания вьюсета миксины
     # указываем аттрибуты queryset, serializer_class:
     # в queryset задаем выборку объектов модели,
     # с которой будет работать вьюсет
@@ -228,10 +230,14 @@ class TagViewSet(viewsets.ReadOnlyModelViewSet):
     # для сериализации данных
     queryset = Tag.objects.all()
     serializer_class = TagSerializer
+    permission_classes = (AllowAny, )
+    pagination_class = None
 
 
-# ЧАСТИЧНО ГОТОВО
-class IngredientViewSet(viewsets.ReadOnlyModelViewSet):
+# ГОТОВО
+class IngredientViewSet(mixins.ListModelMixin,
+                        mixins.RetrieveModelMixin,
+                        viewsets.GenericViewSet):
     """
     Получение списка ингредиентов и конкретного ингредиента по его id.
     """
@@ -241,49 +247,60 @@ class IngredientViewSet(viewsets.ReadOnlyModelViewSet):
     # basename='ingredients')
     # Этот вьюсет(также как в случае с тегами) должен обрабатывать
     # только GET-запросы:
-    # 1. получение списка ингредиентов
-    # 2. получение конкретного ингредиента по его идентификатору
-    # Также выбираем для создания вьюсета класс ReadOnlyViewSet
-    # Таким образом мы в одном вьюсете можем объединить 2 класса
-    # IngredientList и IngredientDetail(действия list, retrieve)
+    # 1. получение списка ингредиентов(list)
+    # 2. получение конкретного ингредиента по его идентификатору(retrieve)
+    # Также выбираем для создания вьюсета миксины только для тех действий
+    # которые нам нужны
+
     # указываем необходимые аттрибуты:
     # в queryset задаем выборку объектов модели,
     # с которой будет работать вьюсет
     # в serializer_class указываем какой сериализатор будет использован
     # для сериализации данных
+    # задаем также разрешение на уровне представления - для всех
+    # пагинация при выводе списка ингредиентов не нужна, так что None
+    # задаем возможность поиска по имени
     queryset = Ingredient.objects.all()
     serializer_class = IngredientSerializer
+    permission_classes = (AllowAny, )
+    pagination_class = None
+    filter_backends = (filters.SearchFilter, )
+    search_fields = ('^name', )
 
 
 # для описания логики всех действий с ресурсом Рецепты создаем вьюсет
-# на основе ModelViewSet, так как этот класс включает весь список операций CRUD.
-# list, retrieve, create, update, destroy
+# на основе ModelViewSet,
+# так как этот класс включает весь список операций CRUD.
+# и нам нужны практически все - list, retrieve, create, update, destroy
 class RecipeViewSet(viewsets.ModelViewSet):
     # дальше нужно указать 2 обязательных поля
     # выборку объектов модели, с которыми будет работать вьюсет
     # а также параметр serializer_class или get_serializer_class
     # (для того, чтобы задать динамическое поведение -
-    # иметь возможность выбрать нужный сериализатор в зависимости от типа запроса)
+    # иметь возможность выбрать нужный сериализатор в зав-ти от запроса)
     queryset = Recipe.objects.all()
+    permission_classes = (IsAuthorOrReadOnly, )
+    http_method_names = ['get', 'post', 'patch', 'create', 'delete']
 
     def get_serializer_class(self):
         if self.action in ('list', 'retrieve'):
             return ReadRecipeSerializer
         return CreateRecipeSerializer
+
     # далее нестандартные действия, которые нужно сделать маршрутизируемыми.
     # для таких действий можно написать отдельные действия задекорировать их
     # @action - этот способ позволяет создать эндпоинты для этих действий
     # 1-ый метод - скачать файл со списком покупок
-    @action()
+    @action(detail=True)
     def download_shopping_cart(self, request):
         pass
 
     # 2-ой метод - добавить рецепт в список покупок или удалить его из списка
-    @action()
+    @action(detail=True)
     def shopping_cart(self, request):
         pass
 
     # 3-ий метод - добавить рецепт в избранное или удалить из избранного
-    @action()
+    @action(detail=True)
     def favorite(self, request):
         pass
