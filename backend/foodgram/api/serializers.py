@@ -312,7 +312,7 @@ class RecipeIngredientSerializer(serializers.ModelSerializer):
     # для полей in_favorite, is_in_shopping_cart -
     #  для того, чтобы создать новые поля, которых нет в модели
 
-
+# ГОТОВО
 class ReadRecipeSerializer(serializers.ModelSerializer):
     """[GET]Сериализатор для модели рецептов(только для чтения)."""
     author = ReadUserSerializer(read_only=True)
@@ -354,7 +354,8 @@ class ReadRecipeSerializer(serializers.ModelSerializer):
         return (
             request.user.is_authenticated
             and ShoppingCart.objects.filter(
-                user=request.user, recipe=obj).exists())
+                user=request.user, recipe=obj).exists()
+        )
 
     class Meta:
         # укажем модель
@@ -416,7 +417,7 @@ class CreateRecipeSerializer(serializers.ModelSerializer):
     image = Base64ImageField()
 
     # обязательный этап десериализации - это валидация данных
-    # валидация прошла успешно, т.е данные соответствуют модели
+    # если валидация прошла успешно, т.е данные соответствуют модели
     # то экземпляр рецепта будет создан и пользователю придет сообщение
     # для валидации данных в сериализаторе нужно прописать метод def validate
 
@@ -448,39 +449,39 @@ class CreateRecipeSerializer(serializers.ModelSerializer):
             )
         return obj
 
-    def get_is_favorited(self, obj):
-        """Проверяет, добавил ли пользователь рецепт в избранное."""
-        # obj - это объект сериализации, экземпляр класса Recipe
-        # Этот метод соглсно тз должен вернуть True,
-        # если данный рецепт есть в избранном у пользователя из запроса
-        # и False, если его нет в избранном пользователя
-        # т.е если экземпляр класса Favorite в качестве user содержит
-        # пользователя из запроса(request.user)
-        # а в качестве рецепта - obj, то вернется True
-        # получить юзера из запроса напрямую мы не можем,
-        # получим сначала объект запроса, а потом из него извлечем юзера
-        request = self.context.get('request')
-        return (
-            request.user.is_authenticated
-            and (Favorite.objects.filter(
-                user=request.user, recipe=obj).exists())
-        )
+    # def get_is_favorited(self, obj):
+    #     """Проверяет, добавил ли пользователь рецепт в избранное."""
+    #     # obj - это объект сериализации, экземпляр класса Recipe
+    #     # Этот метод соглсно тз должен вернуть True,
+    #     # если данный рецепт есть в избранном у пользователя из запроса
+    #     # и False, если его нет в избранном пользователя
+    #     # т.е если экземпляр класса Favorite в качестве user содержит
+    #     # пользователя из запроса(request.user)
+    #     # а в качестве рецепта - obj, то вернется True
+    #     # получить юзера из запроса напрямую мы не можем,
+    #     # получим сначала объект запроса, а потом из него извлечем юзера
+    #     request = self.context.get('request')
+    #     return (
+    #         request.user.is_authenticated
+    #         and (Favorite.objects.filter(
+    #             user=request.user, recipe=obj).exists())
+    #     )
 
-    def get_is_in_shopping_cart(self, obj):
-        """Проверяет, добавил ли пользователь рецепт в список покупок."""
-        # obj - объект сериализации, экземпляр класса Recipe
-        # Этот метод согласно тз должен вернуть True,
-        # если этот рецепт есть в списке покупок пользователя
-        # т.е если экземпляр класса ShoppingCart содержаит в кач-ве user
-        # пользователя из запроса(request.user)
-        # а в качестве recipe - obj, то вернется True
-        # получить юзера из запроса напрямую мы не можем,
-        # получим сначала объект запроса, а потом из него извлечем юзера
-        request = self.context.get('request')
-        return (
-            request.user.is_authenticated
-            and ShoppingCart.objects.filter(
-                user=request.user, recipe=obj).exists())
+    # def get_is_in_shopping_cart(self, obj):
+    #     """Проверяет, добавил ли пользователь рецепт в список покупок."""
+    #     # obj - объект сериализации, экземпляр класса Recipe
+    #     # Этот метод согласно тз должен вернуть True,
+    #     # если этот рецепт есть в списке покупок пользователя
+    #     # т.е если экземпляр класса ShoppingCart содержаит в кач-ве user
+    #     # пользователя из запроса(request.user)
+    #     # а в качестве recipe - obj, то вернется True
+    #     # получить юзера из запроса напрямую мы не можем,
+    #     # получим сначала объект запроса, а потом из него извлечем юзера
+    #     request = self.context.get('request')
+    #     return (
+    #         request.user.is_authenticated
+    #         and ShoppingCart.objects.filter(
+    #             user=request.user, recipe=obj).exists())
 
     # задаем функцию, которая связывает ингредиенты и теги с рецептом
     # эту функцию обернем в декоратор @staticmethod

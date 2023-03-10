@@ -290,6 +290,7 @@ class RecipeViewSet(viewsets.ModelViewSet):
     filterset_class = RecipeFilter
     # указываем возможные методы
     http_method_names = ['get', 'post', 'patch', 'create', 'delete']
+    pagination_class = CustomPaginator
 
     # укажем метод get_serializer_class для выбора нужного сериализатора
     # в зависимости от типа запроса
@@ -351,8 +352,8 @@ class RecipeViewSet(viewsets.ModelViewSet):
             # если же метод запроса DELETE,
             #  то нужно удалить указанный экземпляр списка покупок
             # для этого опять же используем метод get_object_or_404
-            get_object_or_404(ShoppingCart(recipe=recipe,
-                                           user=request.user).delete())
+            get_object_or_404(ShoppingCart, recipe=recipe,
+                                           user=request.user).delete()
             return Response({'detail': 'Рецепт удален из списка покупок'},
                             status=status.HTTP_204_NO_CONTENT)
 
@@ -400,7 +401,8 @@ class RecipeViewSet(viewsets.ModelViewSet):
             # если же метод запроса DELETE,
             #  то нужно удалить указанный экземпляр избранного
             # для этого опять же используем метод get_object_or_404
-            get_object_or_404(Favorite(recipe=recipe,
-                                       user=request.user).delete())
+
+            get_object_or_404(Favorite, recipe=recipe,
+                                       user=request.user).delete()
             return Response({'detail': 'Рецепт удален из избранного'},
                             status=status.HTTP_204_NO_CONTENT)
