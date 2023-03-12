@@ -85,8 +85,7 @@ class Recipe(models.Model):
         User,
         verbose_name='Автор рецепта',
         related_name='recipes',
-        on_delete=models.SET_NULL,
-        null=True,
+        on_delete=models.CASCADE
     )
 
     # поле представляет собой связь с таблицей Tags
@@ -151,6 +150,12 @@ class Recipe(models.Model):
         verbose_name = 'Рецепт'
         verbose_name_plural = 'Рецепты'
         ordering = ('-id',)
+        # constraints = (
+        #     models.UniqueConstraint(
+        #         fields=('author', 'id'),
+        #         name='unique_recipe'
+        #     ),
+        # )
 
     def __str__(self):
         """Строковое представление объекта модели."""
@@ -173,13 +178,13 @@ class RecipeIngredient(models.Model):
         Recipe,
         on_delete=models.CASCADE,
         verbose_name='Связанный рецепт',
-        related_name='recipes'
+        related_name='recipe_to_ingredient'
     )
     ingredient = models.ForeignKey(
         Ingredient,
         on_delete=models.CASCADE,
         verbose_name='Связанные ингредиенты',
-        related_name='ingredients'
+        related_name='ingredient_to_recipe'
     )
     # далее в этой промежуточной модели должно быть дополнительное
     # поле по кол-ву ингредиентов
