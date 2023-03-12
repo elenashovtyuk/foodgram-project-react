@@ -219,10 +219,13 @@ class TagSerializer(serializers.ModelSerializer):
 
 
 # ГОТОВО
-class RecipeIngredientSerializer(serializers.ModelSerializer):
-    """Сериализатор для промежуточной модели RecipeIngredient."""
+class RecipeIngredientReadSerializer(serializers.ModelSerializer):
+    """
+    Сериализатор для вывода информации об ингредиентах в составе рецепта.
+    Выводит список ингредиентов с указанием их кол-ва и ед.изм.
+    """
     # так как на выходе мы должны получить поля,
-    #  отличные от тех, что в исходной модели
+    # отличные от тех, что в исходной модели
     # то укажем в классе Meta в fields поля в нужном виде,
     # а сами поля, которые нужно изменить - переопределим выше
     # укажем эти поля с типом ReadOnly и в аттрибутах укажем source
@@ -232,7 +235,7 @@ class RecipeIngredientSerializer(serializers.ModelSerializer):
     # то есть, данные из связанной модели Ingredients
 
     id = serializers.PrimaryKeyRelatedField(
-        source='id',
+        source='ingredient.id',
         queryset=Ingredient.objects.all()
     )
     name = serializers.ReadOnlyField(source='ingredient.name')
@@ -243,8 +246,23 @@ class RecipeIngredientSerializer(serializers.ModelSerializer):
         model = RecipeIngredient
         fields = ('id',
                   'name',
-                  'measurement_unit'
+                  'measurement_unit',
                   'amount')
+
+
+class RecipeIngredientCreateSerializer(serializers.ModelSerializer):
+    """Ингредиент и количество для создания рецепта."""
+    id = serializers.IntegerField(
+        source='ingredient_id',
+        required=True
+    )
+    amount = serializers.IntegerField(
+        required=True
+    )
+
+    class Meta:
+        model = RecipeIngredient
+        fields = ('id', 'amount')
 
 
 # ГОТОВО
@@ -317,12 +335,22 @@ class RecipeIngredientSerializer(serializers.ModelSerializer):
 # ГОТОВО
 class ReadRecipeSerializer(serializers.ModelSerializer):
     """[GET]Сериализатор для модели рецептов(только для чтения)."""
-    author = ReadUserSerializer(read_only=True)
-    tags = TagSerializer(many=True, read_only=True)
-    ingredients = RecipeIngredientSerializer(many=True, read_only=True)
+    author = ReadUserSerializer(
+        read_only=True
+    )
+    tags = TagSerializer(
+        many=True,
+        read_only=True
+    )
+    ingredients = RecipeIngredientReadSerializer(
+        many=True,
+        source='recipe_to_ingredient'
+    )
     is_favorited = SerializerMethodField()
     is_in_shopping_cart = SerializerMethodField()
-    image = Base64ImageField()
+    image = Base64ImageField(
+        required=True
+    )
 
     def get_is_favorited(self, obj):
         """Проверяет, добавил ли пользователь рецепт в избранное."""
@@ -408,15 +436,21 @@ class CreateRecipeSerializer(serializers.ModelSerializer):
     author = ReadUserSerializer(read_only=True)
     # для поля tags выбираем PrimaryKeyRelatedField,
     # так как на выходе должен быть список id
+    # так как поле tags в модели отношение ManyToMany, то нужно
+    # указать параметр many=True
     tags = serializers.PrimaryKeyRelatedField(many=True,
                                               queryset=Tag.objects.all())
     id = serializers.ReadOnlyField()
     # для ингредиентов указываем типом поля сериализатор
     #  для промежуточной модели
-    ingredients = RecipeIngredientSerializer(many=True)
+    ingredients = RecipeIngredientCreateSerializer(
+        source='ingredient_to_recipe',
+        many=True
+    )
     # is_favorite = SerializerMethodField()
     # is_in_shopping_cart = SerializerMethodField()
-    image = Base64ImageField()
+    image = Base64ImageField(required=True)
+
     # обязательный этап десериализации - это валидация данных
     # если валидация прошла успешно, т.е данные соответствуют модели
     # то экземпляр рецепта будет создан и пользователю придет сообщение
@@ -427,161 +461,147 @@ class CreateRecipeSerializer(serializers.ModelSerializer):
     # при создании рецепта должен быть указан хотя бы 1 тег
     # при создании рецепта должен быть указан хотя бы 1 ингредиент
     # ингредиенты -уникальны
-
     def validate(self, obj):
         for field in ['name', 'text', 'cooking_time']:
-            if not obj.get(field):
+            if not self.initial_data.get(field):
                 raise serializers.ValidationError(
                     f'{field} - Обязательное для заполнения поле.'
                 )
-        if not obj.get('tags'):
+        if not self.initial_data.get('tags'):
             raise serializers.ValidationError(
                 'Нужно указать минимум 1 тег.'
             )
-        if not obj.get('ingredients'):
+        if not self.initial_data.get('ingredients'):
             raise serializers.ValidationError(
                 'Нужно указать минимум 1 ингредиент.'
             )
-        inrgedient_id_list = [item['id'] for item in obj.get('ingredients')]
+        inrgedient_id_list = [
+            item['id'] for item in self.initial_data.get('ingredients')]
         unique_ingredient_id_list = set(inrgedient_id_list)
         if len(inrgedient_id_list) != len(unique_ingredient_id_list):
             raise serializers.ValidationError(
                 'Ингредиенты должны быть уникальными.'
             )
+        # tags = self.initial_data.get('tags')
+        # ingredients = self.initial_data.get('ingredients')
+        # obj.update({
+        #     'tags': tags,
+        #     'ingredients': ingredients,
+        #     'author': self.context.get('request').user
+        # })
         return obj
-
-    def get_is_favorited(self, obj):
-        """Проверяет, добавил ли пользователь рецепт в избранное."""
-        # obj - это объект сериализации, экземпляр класса Recipe
-        # Этот метод соглсно тз должен вернуть True,
-        # если данный рецепт есть в избранном у пользователя из запроса
-        # и False, если его нет в избранном пользователя
-        # т.е если экземпляр класса Favorite в качестве user содержит
-        # пользователя из запроса(request.user)
-        # а в качестве рецепта - obj, то вернется True
-        # получить юзера из запроса напрямую мы не можем,
-        # получим сначала объект запроса, а потом из него извлечем юзера
-        request = self.context.get('request')
-        return (
-            request.user.is_authenticated
-            and (Favorite.objects.filter(
-                user=request.user, recipe=obj).exists())
-        )
-
-    def get_is_in_shopping_cart(self, obj):
-        """Проверяет, добавил ли пользователь рецепт в список покупок."""
-        # obj - объект сериализации, экземпляр класса Recipe
-        # Этот метод согласно тз должен вернуть True,
-        # если этот рецепт есть в списке покупок пользователя
-        # т.е если экземпляр класса ShoppingCart содержаит в кач-ве user
-        # пользователя из запроса(request.user)
-        # а в качестве recipe - obj, то вернется True
-        # получить юзера из запроса напрямую мы не можем,
-        # получим сначала объект запроса, а потом из него извлечем юзера
-        request = self.context.get('request')
-        return (
-            request.user.is_authenticated
-            and ShoppingCart.objects.filter(
-                user=request.user, recipe=obj).exists())
 
     # задаем функцию, которая связывает ингредиенты и теги с рецептом
     # эту функцию обернем в декоратор @staticmethod
     @staticmethod
-    def ingredient_tag_in_recipe(self, recipe, ingredients, tags):
+    def ingredient_tag_in_recipe(recipe, ingredients, tags):
         # для каждого ингредиента в списке ингредиентов
-        # создаем экземпляр модели RecipeIngredient, указывая
+        # создаем список объектов RecipeIngredient, указывая
         # - к какому рецепту какие ингредиенты и в каком кол-ве относятся
         # for ingredient in ingredients:
-        RecipeIngredient.objects.bulk_create([
-            RecipeIngredient(
+        recipe.tags.set(tags)
+        RecipeIngredient.objects.bulk_create(
+            [RecipeIngredient(
                 recipe=recipe,
-                ingredient=ingredient['id'],
-                amount=ingredient['amount']
-            ) for ingredient in ingredients
-        ])
+                ingredient=Ingredient.objects.get(
+                    id=ingredient.get('ingredient_id')),
+                amount=ingredient.get('amount')
+            ) for ingredient in ingredients]
+        )
 
         # для каждого тега из списка тегов
         # добавляем, записываем его в поле tags экземпляра рецепта
-        for tag in tags:
-            recipe.tags.add['tag']
+        # for tag in tags:
+        #     recipe.tags.add['tag']
 
     # чтобы настроить корректное сохранение данных при создании рецепта
     # нужно переопределить метод def create()
 
     def create(self, validated_data):
+        # сначала получаем объект запроса, а уже из него
+        # вытаскиваем автора - пользователя из запроса
+        request = self.context.get('request')
         # убираем список тегов из словаря validated_data
         # и сохраняем этот список в tags
         tags = validated_data.pop('tags')
         # убираем список ингредиентов из словаря validated_data
         # и сохраняем этот список в ingredients
-        ingredients = validated_data.pop('ingredients')
+        ingredients = validated_data.pop('ingredient_to_recipe')
         # cоздадим новый экземпляр рецепта,
         # пока без списка ингредиентов и списка тегов.
         # Эти данные пока лежат в стороне, ждут обработки
-        # (tags_data, ingredients_data)
+        # (tags, ingredients)
 
         # автора рецепта получаем из объекта запроса
-        # сначала получаем объект запроса, а уже из него
-        # вытаскиваем автора - пользователя из запроса
-        request = self.context.get('request')
         recipe = Recipe.objects.create(author=request.user,
                                        **validated_data)
         # далее вызываем функцию, которая написана выше
         # мы можем обратиться к этому методу через self
-        self.ingredient_tag_in_recipes(recipe, ingredients, tags)
+        self.ingredient_tag_in_recipe(recipe, ingredients, tags)
         # метод create должен возвращать объект, экземпляр рецепта
         # с уже настроеными связями, в итоге получим корректно созданный
         # экземпляр рецепта с списками ингредиентов и тегов
         # по полям tags, ingredients
         return recipe
 
+    def update(self, recipe, validated_data):
+        """ Редактирует рецепт. """
+        tags = validated_data.pop('tags')
+        ingredients = validated_data.pop('ingredient_to_recipe')
+        if tags:
+            recipe.tags.clear()
+        if ingredients:
+            recipe.ingredients.clear()
+        self.ingredient_tag_in_recipe(recipe, ingredients, tags)
+        return super().update(recipe, validated_data)
     # чтобы настроить корректное поведение при изменении рецепта
     # нужно переопределить метод def update()
     # в этот метод нужно передать ссылку на объект,
     # который нужно изменить(instance)
     # а также словарь с проверенными данными(validated_data)
-    def update(self, instance, validated_data):
-        # где:
-        # instancе - объект рецепта, который нужно изменить
-        # validated_data - проверенные валидные данные для изменения рецепта
-        # далее, используя ORM Django
-        # меняем локальные аттрибуты объекта instance
-        # instance.name, instance.image, instance.text, instance.cooking_time
-        # - это локальные аатрибуты объекта, который нужно изменить
-        # далее нужно указать значения,
-        # на которые стоит поменять первоначальные
-        # эти значения мы можем взять из словаря с проверенными данными
-        # для этого используем словарный метод get -
-        # чтобы вытащить по ключу соответствующие значения
-        # если таких значений нет в словаре validated_data, то
-        # присвоим значения по умолчанию, т.е instance.name и т.д
-        instance.name = validated_data.get('name', instance.name)
-        instance.image = validated_data.get('image', instance.image)
-        instance.text = validated_data.get('text', instance.text)
-        instance.cooking_time = validated_data.get(
-            'cooking_time', instance.cooking_time)
-        # для изменения локальных аттрибутов tags и ingredients
-        # используем метод pop - т.е если ключи 'tags' и 'ingredients'
-        # есть в словаре validated_data, то нужно удалить их и вернуть
-        # в противном случае будет KeyError
-        tags = validated_data.pop('tags')
-        ingredients = validated_data.pop('ingredients')
-        # эти данные ждут обработки
-        # фильтруем те вэкземпляры промежуточной таблицы,
-        # где:
-        # recipe - это объект рецепта, который нужно изменить, instance
-        # а все записи с игредиентами удалены
-        # дальше через self указываем, вызываем наш статический метод
-        # эта функция связывает теги и ингредиенты с рецептом
-        # и возвращает готовый рецепт
-        RecipeIngredient.objects.filter(
-            recipe=instance,
-            ingredient__in=instance.ingredients.all()).delete()
-        self.ingredient_tag_in_recipe(instance, tags, ingredients)
-        # сохраняем изменения и возвращаем объект instance -
-        # измененный, обновленный рецепт
-        instance.save()
-        return instance
+    # def update(self, instance, validated_data):
+    #     # где:
+    #     # instancе - объект рецепта, который нужно изменить
+    #     # validated_data - проверенные валидные данные для изменения рецепта
+    #     # далее, используя ORM Django
+    #     # меняем локальные аттрибуты объекта instance
+    #     # instance.name, instance.image, instance.text, instance.cooking_time
+    #     # - это локальные аатрибуты объекта, который нужно изменить
+    #     # далее нужно указать значения,
+    #     # на которые стоит поменять первоначальные
+    #     # эти значения мы можем взять из словаря с проверенными данными
+    #     # для этого используем словарный метод get -
+    #     # чтобы вытащить по ключу соответствующие значения
+    #     # если таких значений нет в словаре validated_data, то
+    #     # присвоим значения по умолчанию, т.е instance.name и т.д
+    #     instance.name = validated_data.get('name', instance.name)
+    #     instance.image = validated_data.get('image', instance.image)
+    #     instance.text = validated_data.get('text', instance.text)
+    #     instance.cooking_time = validated_data.get(
+    #         'cooking_time', instance.cooking_time)
+    #     # для изменения локальных аттрибутов tags и ingredients
+    #     # используем метод pop - т.е если ключи 'tags' и 'ingredients'
+    #     # есть в словаре validated_data, то нужно удалить их и вернуть
+    #     # в противном случае будет KeyError
+    #     tags = validated_data.pop('tags')
+    #     ingredients = validated_data.pop('ingredient_to_recipe')
+    #     # эти данные ждут обработки
+    #     # фильтруем те вэкземпляры промежуточной таблицы,
+    #     # где:
+    #     # recipe - это объект рецепта, который нужно изменить, instance
+    #     # а все записи с игредиентами удалены
+    #     # дальше через self указываем, вызываем наш статический метод
+    #     # эта функция связывает теги и ингредиенты с рецептом
+    #     # и возвращает готовый рецепт
+    #     RecipeIngredient.objects.filter(
+    #         recipe=instance,
+    #         ingredient=instance.ingredients.all()).delete()
+    #     self.ingredient_tag_in_recipe(instance, tags, ingredients)
+    #     # сохраняем изменения и возвращаем объект instance -
+    #     # измененный, обновленный рецепт
+    #     instance.save()
+    #     return instance
+
 
     class Meta:
         model = Recipe
@@ -593,9 +613,7 @@ class CreateRecipeSerializer(serializers.ModelSerializer):
             'image',
             'name',
             'text',
-            'cooking_time',
-            # 'is_favorite',
-            # 'is_in-shopping_cart',
+            'cooking_time'
         )
 
     # для сериализаторов в DRF есть метод to_representation
@@ -605,30 +623,24 @@ class CreateRecipeSerializer(serializers.ModelSerializer):
     # нам нужно сделать так, чтобы выводились все поля полностью,
     # вместе с полями is_favorite, is_in_shopping_cart
     # а не только те, что указаны в модели рецепта
+    # для этого мы указываем сериализатор для чтения рецептов
+    # в котором выводятся все поля
     def to_representation(self, instance):
         return ReadRecipeSerializer(instance,
                                     context=self.context).data
 
-# class FavoriteSerializer(serializers.ModelSerializer):
-#     """Сериализатор для модели избранных рецептов."""
-#     class Meta:
-#         model = Favorite
-#         fields = ('user', 'recipe')
 
-
-# class ShoppingCartSerializer(serializers.ModelSerializer):
-#     """Сериализатор для модели списка покупок."""
-#     class Meta:
-#         model = ShoppingCart
-#         fields = ('user', 'recipe', 'add_date')
 class RecipeSerializer(serializers.ModelSerializer):
-    """Список рецептов без ингридиентов."""
+    """Cписок рецептов без ингридиентов.
+    Выводится после добавления рецепта в избранное или в список покупок.
+    """
     image = Base64ImageField(read_only=True)
     name = serializers.ReadOnlyField()
     cooking_time = serializers.ReadOnlyField()
 
     class Meta:
         model = Recipe
+        # указываем поля, по которым нужна сериализация
         fields = ('id', 'name',
                   'image', 'cooking_time')
 
