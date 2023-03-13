@@ -1,21 +1,24 @@
 # from django.shortcuts import render
-# from django.http import HttpResponse
-from django_filters.rest_framework import DjangoFilterBackend
+from django.http import HttpResponse
+from django.db.models import Sum
 from django.shortcuts import get_object_or_404
-from recipes.models import Ingredient, Recipe, Tag, Favorite, ShoppingCart
-from rest_framework import mixins, status, viewsets, filters
+from django_filters.rest_framework import DjangoFilterBackend
+from recipes.models import (Favorite, Ingredient, Recipe, RecipeIngredient,
+                            ShoppingCart, Tag)
+from rest_framework import filters, mixins, status, viewsets
 from rest_framework.decorators import action
-from rest_framework.permissions import IsAuthenticated, AllowAny
+from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from users.models import Subscription, User
+from foodgram.settings import FILE
 from .filters import RecipeFilter
-from .pagination import (CustomPaginator,)
+from .pagination import CustomPaginator
+from .permissions import IsAuthorOrReadOnly
 from .serializers import (CreateRecipeSerializer, CreateUserSerializer,
                           IngredientSerializer, ReadRecipeSerializer,
-                          ReadUserSerializer, SetPasswordSerializer,
-                          SubscribeSerialiser, SubscriptionSerialiser,
-                          TagSerializer, RecipeSerializer)
-from .permissions import (IsAuthorOrReadOnly,)
+                          ReadUserSerializer, RecipeSerializer,
+                          SetPasswordSerializer, SubscribeSerialiser,
+                          SubscriptionSerialiser, TagSerializer)
 
 
 # ГОТОВО
@@ -303,9 +306,102 @@ class RecipeViewSet(viewsets.ModelViewSet):
     # для таких действий можно написать отдельные действия задекорировать их
     # @action - этот способ позволяет создать эндпоинты для этих действий
     # 1-ый метод - скачать файл со списком покупок
-    @action(detail=True)
-    def download_shopping_cart(self, request):
-        pass
+    @action(detail=False, methods=['get'],
+            permission_classes=(IsAuthenticated,))
+    def download_shopping_cart(self, request, **kwargs):
+
+        # в переменной ingredients сохраняем выборку экземпляров
+        # RecipeIngredient из тех рецептов в списке покупок,
+        # у которых пользователь добавивший их в список покупок
+        # - это пользователь из запроса
+        ingredients = (
+            RecipeIngredient.objects
+            .filter(recipe__carts__user=request.user)
+
+
+            # далее нужно сгруппировать по имени ингредиента
+            # и для этих сгруппированных по имени ингредиентов
+            # уже будет выполнено сложение из кол-ва
+            .order_by('ingredient__name')
+
+
+            # далее к этой выборке применяем метод values
+            # использование этого метода позволяет при выборке вернуть не все
+            # экземпляры модели RecipeIngredient целиком со всеми полями,
+            # а только нужные поля
+            # для дальнейшего суммирования именно по этому полю
+            # используем related_name,
+            # чтобы для ингредиента в рецепте из связанной таблицы вытащить название и ед.изм
+            .values('ingredient__name', 'ingredient__measurement_unit')
+
+
+            # далее с помощью метода annotate вызываем агрегирующую функцию Sum
+            # чтобы просуммировать ингредиенты из полученной выборки
+            # агрегирующую функцию Sum импортируем из django.db.models
+            .annotate(result_sum_ingr=Sum('amount'))
+
+
+            # метод values_list позволяет вернуть информацию
+            # по указнному выше полю ингредиентв нужном виде -
+            # в виде кортежа из значений полей экземпляра ingredient
+            .values_list(
+                'ingredient__name',
+                'result_sum_ingr',
+                'ingredient__measurement_unit')
+        )
+
+
+        # далее создаем пустой список, куда будет записан перечень ингредиентов
+        list_of_ingredients = []
+
+        # далее применяем метод списка .append - list.append(item)
+        # он добавляет элемент, указанный в скобках в конец списка,
+        # к которому этот метод применен - то есть, в наш пустой список
+        # и в качестве значения, которое надо добавить в этот список
+        # укажем строки, к которым применено форматирование
+        # с помощью метода format
+        # внутри нам требуется передать несколько аргументов -
+        # это поля экземпляра модели RecipeIngredient,
+        # которые мы выводим выше в values_list
+        # соответственно для каждого такого экземпляра
+        # мы осуществляем распаковку
+        [list_of_ingredients.append(
+            '{} - {} {}.'.format(*ingredient)) for ingredient in ingredients]
+
+
+        # данные, которые нужно вернуть пользователю необходимо передать
+        #  в конструктор HttpResppnse
+        # для вывода ответа используем строковый метод join
+        # с его помощьюмы можем объединить в 1 строку элементы списка
+        # list_of_ingredients
+        # где 'Cписок покупок:\n' + '\n' - это разделитель между элементами
+        # \n - перевод каретки на новую строку
+        # т.е выводим "Список покупок" -> переходим на новую строку
+        # и далее выводим строку, которая объединяет элементы списка
+        # и каждый элемент выводит с новой строки(/n)
+        # content_type:
+        # MIME-тип ответа, устанавливает HTTP-заголовок Content-Type.
+        # Если этот параметр не установлен, то применяется mime-тип text/html
+        # и значение настройки DEFAULT_CHARSET, то есть в итоге будет:
+        # "text/html; charset=utf-8".
+        file = HttpResponse(
+            'Cписок покупок:\n' + '\n'.join(list_of_ingredients),
+            content_type='text/plain, charset=utf8')
+
+
+        # Чтобы браузер обрабатывал ответ как вложение файла,
+        #  установим заголовки Content-Disposition
+        # заголовок ответа Content-Disposition представляет собой заголовок,
+        # указывающий, будет ли контент отображаться встроенным в браузере,
+        # то есть как веб-страница, или как часть веб-страницы,
+        # или как вложение , которое загружается и сохраняется локально.
+        # параметр attachment указывает, что файл должен быть именно загружен
+        # большинство браузеров представляют диалоговое окно «Сохранить как»,
+        # предварительно заполненное со значением параметров filename если они есть).
+        # у нас указан filename = FILE
+        # его мы импортируем из settings.py
+        file['Content-Disposition'] = (f'attachment; filename={FILE}')
+        return file
 
     # 2-ой метод - добавить рецепт в список покупок или удалить его из списка
     @action(detail=True, methods=['post', 'delete'],
