@@ -5,6 +5,7 @@ from recipes.models import (Favorite, Ingredient, Recipe, RecipeIngredient,
                             ShoppingCart, Tag)
 from rest_framework import serializers
 from rest_framework.fields import SerializerMethodField
+from rest_framework.validators import UniqueTogetherValidator
 from users.models import Subscription, User
 
 # момент с аутентификацией решаем с помощью библиотеки djoser.
@@ -462,6 +463,13 @@ class CreateRecipeSerializer(serializers.ModelSerializer):
     # при создании рецепта должен быть указан хотя бы 1 ингредиент
     # ингредиенты -уникальны
     def validate(self, obj):
+
+        # нужно проверить, что в рецептах юзера нет названия рецепта,
+        # которое передается в форме создания рецепта
+        if Recipe.objects.filter(name=obj['name']):
+            raise serializers.ValidationError('Такой рецепт уже существует.')
+
+
         for field in ['name', 'text', 'cooking_time']:
             if not self.initial_data.get(field):
                 raise serializers.ValidationError(
@@ -608,6 +616,12 @@ class CreateRecipeSerializer(serializers.ModelSerializer):
             'text',
             'cooking_time'
         )
+        validators = [
+            UniqueTogetherValidator(
+                queryset=Recipe.objects.all(),
+                fields=('name', 'image')
+            )
+        ]
 
     # для сериализаторов в DRF есть метод to_representation
     # здесь instance - это экземпляр класса, для которого написан сериализатор
