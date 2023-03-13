@@ -602,7 +602,6 @@ class CreateRecipeSerializer(serializers.ModelSerializer):
     #     instance.save()
     #     return instance
 
-
     class Meta:
         model = Recipe
         fields = (
