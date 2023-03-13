@@ -482,13 +482,7 @@ class CreateRecipeSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError(
                 'Ингредиенты должны быть уникальными.'
             )
-        # tags = self.initial_data.get('tags')
-        # ingredients = self.initial_data.get('ingredients')
-        # obj.update({
-        #     'tags': tags,
-        #     'ingredients': ingredients,
-        #     'author': self.context.get('request').user
-        # })
+
         return obj
 
     # задаем функцию, которая связывает ингредиенты и теги с рецептом
