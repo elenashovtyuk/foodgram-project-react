@@ -469,7 +469,6 @@ class CreateRecipeSerializer(serializers.ModelSerializer):
         if Recipe.objects.filter(name=obj['name']):
             raise serializers.ValidationError('Такой рецепт уже существует.')
 
-
         for field in ['name', 'text', 'cooking_time']:
             if not self.initial_data.get(field):
                 raise serializers.ValidationError(
@@ -511,10 +510,6 @@ class CreateRecipeSerializer(serializers.ModelSerializer):
             ) for ingredient in ingredients]
         )
 
-        # для каждого тега из списка тегов
-        # добавляем, записываем его в поле tags экземпляра рецепта
-        # for tag in tags:
-        #     recipe.tags.add['tag']
 
     # чтобы настроить корректное сохранение данных при создании рецепта
     # нужно переопределить метод def create()
@@ -561,48 +556,6 @@ class CreateRecipeSerializer(serializers.ModelSerializer):
     # в этот метод нужно передать ссылку на объект,
     # который нужно изменить(instance)
     # а также словарь с проверенными данными(validated_data)
-    # def update(self, instance, validated_data):
-    #     # где:
-    #     # instancе - объект рецепта, который нужно изменить
-    #     # validated_data - проверенные валидные данные для изменения рецепта
-    #     # далее, используя ORM Django
-    #     # меняем локальные аттрибуты объекта instance
-    #     # instance.name, instance.image, instance.text, instance.cooking_time
-    #     # - это локальные аатрибуты объекта, который нужно изменить
-    #     # далее нужно указать значения,
-    #     # на которые стоит поменять первоначальные
-    #     # эти значения мы можем взять из словаря с проверенными данными
-    #     # для этого используем словарный метод get -
-    #     # чтобы вытащить по ключу соответствующие значения
-    #     # если таких значений нет в словаре validated_data, то
-    #     # присвоим значения по умолчанию, т.е instance.name и т.д
-    #     instance.name = validated_data.get('name', instance.name)
-    #     instance.image = validated_data.get('image', instance.image)
-    #     instance.text = validated_data.get('text', instance.text)
-    #     instance.cooking_time = validated_data.get(
-    #         'cooking_time', instance.cooking_time)
-    #     # для изменения локальных аттрибутов tags и ingredients
-    #     # используем метод pop - т.е если ключи 'tags' и 'ingredients'
-    #     # есть в словаре validated_data, то нужно удалить их и вернуть
-    #     # в противном случае будет KeyError
-    #     tags = validated_data.pop('tags')
-    #     ingredients = validated_data.pop('ingredient_to_recipe')
-    #     # эти данные ждут обработки
-    #     # фильтруем те вэкземпляры промежуточной таблицы,
-    #     # где:
-    #     # recipe - это объект рецепта, который нужно изменить, instance
-    #     # а все записи с игредиентами удалены
-    #     # дальше через self указываем, вызываем наш статический метод
-    #     # эта функция связывает теги и ингредиенты с рецептом
-    #     # и возвращает готовый рецепт
-    #     RecipeIngredient.objects.filter(
-    #         recipe=instance,
-    #         ingredient=instance.ingredients.all()).delete()
-    #     self.ingredient_tag_in_recipe(instance, tags, ingredients)
-    #     # сохраняем изменения и возвращаем объект instance -
-    #     # измененный, обновленный рецепт
-    #     instance.save()
-    #     return instance
 
     class Meta:
         model = Recipe
@@ -738,10 +691,21 @@ class SubscribeSerialiser(serializers.ModelSerializer):
     # то DRF вызывает метод с именем def get <имя этого поля>
     email = serializers.ReadOnlyField()
     username = serializers.ReadOnlyField()
-
-    is_subscribed = SerializerMethodField()
     recipes = RecipeSerializer(many=True, read_only=True)
     recipes_count = SerializerMethodField()
+    is_subscribed = SerializerMethodField()
+
+    def validate(self, data):
+        """Проверка уникальности подписки и невозможности подписаться на себя."""
+        if (self.context['request'].user == self.instance):
+            raise serializers.ValidationError(
+                {'errors': 'Нельзя подписаться на себя.'})
+
+        if Subscription.objects.filter(user=self.context['request'].user,
+                                       author=self.instance).exists():
+            raise serializers.ValidationError(
+                {'errors': 'Такая подписка уже существует.'})
+        return data
 
     def get_is_subscribed(self, obj):
         """Проверяет - подписан ли пользователь на указанного автора."""
