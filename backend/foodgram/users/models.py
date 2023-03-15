@@ -17,14 +17,14 @@ class User(AbstractUser):
         verbose_name='Адрес электронной почты',
         max_length=254,
         unique=True,
-        # default='default_email'
+
 
     )
     username = models.CharField(
         verbose_name='Уникальный юзернэйм',
         max_length=settings.MAX_LEN_FIELD_USER,
         unique=True,
-        # default='default_username',
+
 
         validators=(
             RegexValidator(
@@ -35,10 +35,12 @@ class User(AbstractUser):
     )
     first_name = models.CharField(
         'Имя',
+        blank=True,
         max_length=settings.MAX_LEN_FIELD_USER
     )
     last_name = models.CharField(
         'Фамилия',
+        blank=True,
         max_length=settings.MAX_LEN_FIELD_USER
     )
 
