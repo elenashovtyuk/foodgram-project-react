@@ -125,7 +125,7 @@ class Recipe(models.Model):
     image = models.ImageField(
         'Изображение рецепта',
         upload_to='recipes/',
-        blank=True
+        # blank=True
     )
     # текстовое поле с описанием рецепта
     # не имеет ограничения по длине текста
