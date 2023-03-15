@@ -1,8 +1,10 @@
 # from django.shortcuts import render
-from django.http import HttpResponse
 from django.db.models import Sum
+# from django.core import validators
+from django.http import HttpResponse
 from django.shortcuts import get_object_or_404
 from django_filters.rest_framework import DjangoFilterBackend
+from foodgram.settings import FILE
 from recipes.models import (Favorite, Ingredient, Recipe, RecipeIngredient,
                             ShoppingCart, Tag)
 from rest_framework import filters, mixins, status, viewsets
@@ -10,8 +12,8 @@ from rest_framework.decorators import action
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from users.models import Subscription, User
-from foodgram.settings import FILE
-from .filters import RecipeFilter
+
+#from .filters import RecipeFilter
 from .pagination import CustomPaginator
 from .permissions import IsAuthorOrReadOnly
 from .serializers import (CreateRecipeSerializer, CreateUserSerializer,
@@ -178,11 +180,14 @@ class UserViewSet(mixins.CreateModelMixin,
         # это получить конкретного автора рецепта по его id,
         # чтобы далее уже можно в зависимости от типа запроса
         # подписаться на него или отписаться
+
         author = get_object_or_404(User, id=kwargs['pk'])
+        # user = User.objects.get(pk=request.user.id)
         # пользователя, подписавшегося на автора получаем из запроса
         # request.user
         # далее прописываем логику действий в зависимости от типа запроса
         if request.method == 'POST':
+
             # если метод POST, то необходима десериализация данных
             # cоздаем экземпляр сериализатора SubscribeSerializer
             # в параметрах передаем  в него объект автора полученного ранее,
@@ -289,8 +294,8 @@ class RecipeViewSet(viewsets.ModelViewSet):
     # используем свой кастомный перимшн
     permission_classes = (IsAuthorOrReadOnly, )
     # настраиваем фильтрацию
-    filter_backends = (DjangoFilterBackend, )
-    filterset_class = RecipeFilter
+    filter_backends = (DjangoFilterBackend,)
+    #filterset_fields = ['tags', 'is_favorited']
     # указываем возможные методы
     http_method_names = ['get', 'post', 'patch', 'create', 'delete']
     pagination_class = CustomPaginator
