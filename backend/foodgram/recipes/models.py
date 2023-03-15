@@ -4,17 +4,10 @@ from django.db import models
 from users.models import User
 from django.conf import settings
 
-# Модели приложения recipes:
 
-# В соответствии с Django Coding Style поочередно выполняем след.шаги:
-# первый шаг - описываем поля модели, их типы, свойства
-# второй шаг - описываем класс Meta, чтобы добавить данные о самой модели
-# третий шаг - указываем метод __str__ - строковое представление объекта
-
-
-# объявляем класс Ingredient - наследник класса Model
 class Ingredient(models.Model):
     """Модель описания ингредиентов для рецепта."""
+
     name = models.CharField(
         'Название ингредиента',
         max_length=settings.MAX_LEN_FIELD,
@@ -34,8 +27,6 @@ class Ingredient(models.Model):
         return f'{self.name} ({self.measurement_unit})'
 
 
-# объявляем класс Tag - наследник класса Model
-# все поля в модели Тег обязательны и уникальны
 class Tag(models.Model):
     """Модель описания тегов для рецептов."""
     name = models.CharField(
@@ -43,9 +34,6 @@ class Tag(models.Model):
         unique=True,
         max_length=settings.MAX_LEN_FIELD,
     )
-    # для поля color используем ColorField
-    # предварительно установив пакет django-colorfield
-    # и добавив модуль в settings.py/INSTALLED_APPS
     color = ColorField(
         'Цветовой HEX-код',
         format='hex',
@@ -68,74 +56,37 @@ class Tag(models.Model):
         return f'{self.name} (цвет: {self.color})'
 
 
-# объявляем класс Recipe - наследник класса Model
-# в соответствии с Django Coding Style поочередно выполняем след.шаги:
-# первый шаг - описываем поля модели, их типы, свойства
-# второй шаг - описываем класс Meta, чтобы добавить данные о самой модели
-# третий шаг - указываем метод __str__ - строковое представление объекта
 class Recipe(models.Model):
     """Модель описания рецепта."""
-    # поле author поле отношения с моделью User
-    # указываем модель, связь с которой обеспечивает это поле - User
-    # указываем опцию on_delete со значением SET_NULL, то есть при удалении
-    # пользователя, во всех рецептах этого автора
-    # будет указан None или анонимный автор
-    # обязательно нужно указать null=True - то есть, допускается значение  NULL
+
     author = models.ForeignKey(
         User,
         verbose_name='Автор рецепта',
         related_name='recipes',
         on_delete=models.CASCADE
     )
-
-    # поле представляет собой связь с таблицей Tags
     tags = models.ManyToManyField(
         Tag,
         verbose_name='Теги',
         related_name='recipes',
     )
-
-    # поле представляет собой связь с таблицей Ingredients
-    # связь ManyToMany
-    # промежуточная модель в Django создается автоматически,
-    # но если нужно в промежуточной модели указать дополнительные поля
-    # то есть, не только recipe_id и ingredient_id, то нужно
-    # то нужно эту промежуточную модель задать вручную,
-    # а для ingredient в модели recipe указать через опцию througth
-    # через какую модель это поле ingredient связано с моделью Recipe
     ingredients = models.ManyToManyField(
         Ingredient,
         through='RecipeIngredient',
         verbose_name='Ингридиенты',
         related_name='recipes',
     )
-
-    # текстовое поле с названием рецепта
-    # имеет ограничение по длине текста
     name = models.CharField(
         'Название рецепта',
         max_length=settings.MAX_LEN_FIELD,
     )
-
-    # поле для изображения с рецептом
-    # укажем опцию upload_to -
-    # здесь указываем папку для сохранения файлов этого поля
-    # этот путь относительный и он продолжает путь указанный в MEDIA_ROOT
-    # то есть, путь будет '/media_root/recipes/'
     image = models.ImageField(
         'Изображение рецепта',
         upload_to='recipes/',
-        # blank=True
     )
-    # текстовое поле с описанием рецепта
-    # не имеет ограничения по длине текста
     text = models.TextField(
         'Описание рецепта'
     )
-
-    # поле время приготовления должно быть положительным числовым значением
-    # для того чтобы проверить поле на соответствие минимальному значению
-    # используем встроенный валидатор
     cooking_time = models.PositiveSmallIntegerField(
         'Время приготовления (мин)',
         validators=(
@@ -162,18 +113,12 @@ class Recipe(models.Model):
         return f'{self.name} (Автор: {self.author.username})'
 
 
-# объявляем класс RecipeIngredient -
-# наследник класса Model
-# это промежуточная модель между Recipe и Ingredient
-# ее нужно задавать "вручную", так как необходимы дополнительные поля
-# в промежуточной модели помимо тех, что автоматически создаются
 class RecipeIngredient(models.Model):
     """
     Модель для связи Recipe и Ingredient.
     Содеражит сведения о количестве ингредиентов.
     """
-    # сначала явно указываем поля - внешние ключи от моделей,
-    #  которые учавствуют в этой связи ManyToMany
+
     recipe = models.ForeignKey(
         Recipe,
         on_delete=models.CASCADE,
@@ -186,8 +131,6 @@ class RecipeIngredient(models.Model):
         verbose_name='Связанные ингредиенты',
         related_name='ingredient_to_recipe'
     )
-    # далее в этой промежуточной модели должно быть дополнительное
-    # поле по кол-ву ингредиентов
     amount = models.PositiveSmallIntegerField(
         'Количество',
         validators=(
@@ -217,12 +160,6 @@ class RecipeIngredient(models.Model):
         )
 
 
-# объявляем класс Favorite(Избранное)
-# это модель рецептов, добавленных в избранное пользователем
-# в соответствии с Django Coding Style поочередно выполняем след.шаги:
-# первый шаг - описываем поля модели, их типы, свойства
-# второй шаг - описываем класс Meta, чтобы добавить данные о самой модели
-# третий шаг - указываем метод __str__ - строковое представление объекта
 class Favorite(models.Model):
     """
     Модель избранных рецептов.
@@ -256,7 +193,6 @@ class Favorite(models.Model):
         return f'Пользователь {self.user} добавил "{self.recipe}" в Избранное'
 
 
-# создаем модель списка покупок
 class ShoppingCart(models.Model):
     """
     Модель списка покупок.
