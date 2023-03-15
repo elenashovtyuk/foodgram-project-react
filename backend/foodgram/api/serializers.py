@@ -696,6 +696,7 @@ class SubscribeSerialiser(serializers.ModelSerializer):
     is_subscribed = SerializerMethodField()
 
     def validate(self, data):
+        # в data хранятся сырые необработанные данные
         """Проверка уникальности подписки и невозможности подписаться на себя."""
         if (self.context['request'].user == self.instance):
             raise serializers.ValidationError(
