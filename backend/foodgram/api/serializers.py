@@ -109,11 +109,11 @@ class CreateUserSerializer(serializers.ModelSerializer):
             'last_name',
             'password'
         )
-        extra_kwargs = {
-            'first_name': {'required': True, 'allow_blank': False},
-            'last_name': {'required': True, 'allow_blank': False},
-            'email': {'required': True, 'allow_blank': False},
-        }
+        # extra_kwargs = {
+        #     'first_name': {'required': True, 'allow_blank': False},
+        #     'last_name': {'required': True, 'allow_blank': False},
+        #     'email': {'required': True, 'allow_blank': False},
+        # }
 
 
 # создаем сериализатор для смены пароля -
