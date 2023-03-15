@@ -150,12 +150,12 @@ class Recipe(models.Model):
         verbose_name = 'Рецепт'
         verbose_name_plural = 'Рецепты'
         ordering = ('-id',)
-        # constraints = (
-        #     models.UniqueConstraint(
-        #         fields=('author', 'id'),
-        #         name='unique_recipe'
-        #     ),
-        # )
+        constraints = (
+            models.UniqueConstraint(
+                fields=('name',),
+                name='unique_recipe'
+            ),
+        )
 
     def __str__(self):
         """Строковое представление объекта модели."""
