@@ -13,7 +13,7 @@ from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from users.models import Subscription, User
 
-#from .filters import RecipeFilter
+from .filters import RecipeFilter
 from .pagination import CustomPaginator
 from .permissions import IsAuthorOrReadOnly
 from .serializers import (CreateRecipeSerializer, CreateUserSerializer,
@@ -295,7 +295,8 @@ class RecipeViewSet(viewsets.ModelViewSet):
     permission_classes = (IsAuthorOrReadOnly, )
     # настраиваем фильтрацию
     filter_backends = (DjangoFilterBackend,)
-    #filterset_fields = ['tags', 'is_favorited']
+    filterset_class = RecipeFilter
+    #filterset_fields = ['is_in_shopping_cart', 'is_favorited']
     # указываем возможные методы
     http_method_names = ['get', 'post', 'patch', 'create', 'delete']
     pagination_class = CustomPaginator
