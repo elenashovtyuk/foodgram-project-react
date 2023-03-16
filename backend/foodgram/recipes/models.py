@@ -21,6 +21,12 @@ class Ingredient(models.Model):
         verbose_name = 'Ингредиент'
         verbose_name_plural = 'Ингредиенты'
         ordering = ('name',)
+        constraints = (
+            models.UniqueConstraint(
+                fields=('name', 'measurement_unit'),
+                name='unique_measurement_unit_for_ingredient'
+            ),
+        )
 
     def __str__(self):
         """Cтроковое представление объекта модели"""
@@ -190,7 +196,7 @@ class Favorite(models.Model):
 
     def __str__(self):
         """Строковое представление объекта модели."""
-        return f'Пользователь {self.user} добавил "{self.recipe}" в Избранное'
+        return self.user.username + 'добавил в Избранное' + self.recipe.name
 
 
 class ShoppingCart(models.Model):
@@ -228,4 +234,4 @@ class ShoppingCart(models.Model):
 
     def __str__(self):
         """Строковое представление объекта модели."""
-        return f'{self.recipe} в списке покупок {self.user}'
+        return self.recipe.name + 'в списке покупок' + self.user.username

@@ -1,5 +1,6 @@
 from django.contrib.auth.password_validation import validate_password
 from django.core import exceptions as django_exceptions
+from django.db import transaction
 from drf_base64.fields import Base64ImageField
 from recipes.models import (Favorite, Ingredient, Recipe, RecipeIngredient,
                             ShoppingCart, Tag)
@@ -255,6 +256,7 @@ class CreateRecipeSerializer(serializers.ModelSerializer):
             ) for ingredient in ingredients]
         )
 
+    @transaction.atomic
     def create(self, validated_data):
         request = self.context.get('request')
         tags = validated_data.pop('tags')
@@ -264,6 +266,7 @@ class CreateRecipeSerializer(serializers.ModelSerializer):
         self.ingredient_tag_in_recipe(recipe, ingredients, tags)
         return recipe
 
+    @transaction.atomic
     def update(self, recipe, validated_data):
         tags = validated_data.pop('tags')
         ingredients = validated_data.pop('ingredient_to_recipe')
