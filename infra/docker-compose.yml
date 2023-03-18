@@ -1,5 +1,58 @@
+# указываем, какая версия docker-compose используется
 version: '3.3'
+# здесь мы говорим, что ниже будут описаны сервисы,
+# указываем имена контейнеров, которые должны быть развернуты
+# у нас их 4 - db, backend, frontend, nginx
+# и запускаться они должны именно в таком порядке
 services:
+
+  # описание контейнера db (база данных)
+  db:
+    # cкачать образ, из которого должен быть запущен контейнер
+    image: postgres:13.0-alpine
+    # volume выполняет задачу хранения данных,
+    # по сути это директория, доступная для контейнера.
+    # контейнер сохраняет данные в volume и
+    # они будут там храниться независимо от состояния контейнера
+    # Примонтируем том - ниже указан
+    # volume и связанная с ним директория в контейнере.
+    volumes:
+      - postgres_database:/var/lib/postgresql/data/
+    # адрес файла, где хранятся переменные окружения
+    env_file:
+      - ./.env
+    # пробросить порты
+    # ports:
+    #   - 127.0.0.1:5432:5432
+
+
+  backend:
+    build:
+      # т.к Dockerfile для сборки образа нашего проекта находится в другой папке,
+      # то укажем сначала context - подняться на директорию
+      # выше, перейти в директорию backends
+      # а уже потом относительно этой директории укажем Dockerfile,
+      # на основе которого будем билдить образ
+      context: ../backend
+      dockerfile: Dockerfile
+    # перезапускать всегда, когда возникает ошибка или сервер перезапускается
+    restart: always
+    # укажем тома
+    volumes:
+      # Django будет собирать статику в том static_value
+      # Контейнер web будет работать с данными, хранящиеся в томе static_value,
+      # через свою директорию /app/static/
+      - static_value:/app/static/
+      # Данные, хранящиеся в томе media_value, будут доступны в контейнере web
+      # через директорию /app/media/
+      - media_value:/app/media/
+      # указываем зависимость -
+      # этот контейнер web должен запускаться после запуска контейнера db
+    depends_on:
+      - db
+      # адрес файла, где хранятся переменные окружения
+    env_file:
+      - ./.env
 
   frontend:
     build:
@@ -7,11 +60,34 @@ services:
       dockerfile: Dockerfile
     volumes:
       - ../frontend/:/app/result_build/
+    depends_on:
+      - backend
+
+
+
+
   nginx:
+    # указываем образ для скачивания с DockerHub
     image: nginx:1.19.3
+    # запросы с внешнего порта 80 перенаправляем на внутренний порт 80
     ports:
       - "80:80"
+    # далее указываем тома
     volumes:
       - ./nginx.conf:/etc/nginx/conf.d/default.conf
       - ../frontend/build:/usr/share/nginx/html/
       - ../docs/:/usr/share/nginx/html/api/docs/
+      - static_value:/var/html/static/
+      - media_value:/var/html/media/
+
+    # запуск этого контейнера происходит после запуска контейнера frontend
+    depends_on:
+      - frontend
+    restart: always
+
+
+volumes:
+  # Новые тома
+  static_value:
+  media_value:
+  postgres_database:
