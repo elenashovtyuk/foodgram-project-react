@@ -7,9 +7,10 @@ FROM python:3.7-slim
 WORKDIR /app
 # далее в текущую директорию копируем файл c зависимостями
 COPY requirements.txt .
+# RUN apt-get update && apt-get -y install libpq-dev gcc && pip install psycopg2
 # выполняем установку зависимостей внутри контейнера
-RUN pip3 install -r requirements.txt --no-cache-dir
+RUN pip3 install -r ./requirements.txt --no-cache-dir
 # далее необходимо скопировать содержимое директории foodgram с локального компьютера в /app
-COPY foodgram .
+COPY ./foodgram/ .
 # далее запуск сервера разработки при старте контейнера
 CMD ["gunicorn", "foodgram.wsgi:application", "--bind", "0:8000"]
