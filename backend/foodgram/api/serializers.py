@@ -1,5 +1,6 @@
 from django.contrib.auth.password_validation import validate_password
 from django.core import exceptions as django_exceptions
+from django.core.exceptions import ValidationError
 from django.db import transaction
 from drf_base64.fields import Base64ImageField
 from recipes.models import (Favorite, Ingredient, Recipe, RecipeIngredient,
@@ -219,9 +220,6 @@ class CreateRecipeSerializer(serializers.ModelSerializer):
 
     def validate(self, obj):
 
-        if Recipe.objects.filter(name=obj['name']):
-            raise serializers.ValidationError('Такой рецепт уже существует.')
-
         for field in ['name', 'text', 'cooking_time']:
             if not self.initial_data.get(field):
                 raise serializers.ValidationError(
@@ -261,6 +259,13 @@ class CreateRecipeSerializer(serializers.ModelSerializer):
         request = self.context.get('request')
         tags = validated_data.pop('tags')
         ingredients = validated_data.pop('ingredient_to_recipe')
+
+        if request.user.recipes.filter(
+            name=validated_data.get('name')
+        ).exists():
+            raise ValidationError(
+                {'recipe': 'Вы уже добавили рецепт с таким именем'})
+
         recipe = Recipe.objects.create(author=request.user,
                                        **validated_data)
         self.ingredient_tag_in_recipe(recipe, ingredients, tags)
@@ -339,7 +344,7 @@ class SubscriptionSerialiser(serializers.ModelSerializer):
         limit = request.GET.get('recipes_limit')
         recipes = obj.recipes.all()
         if limit:
-            recipes = recipes[int:(limit)]
+            recipes = recipes[:int(limit)]
         serializer = RecipeSerializer(recipes, many=True, read_only=True)
         return serializer.data
 
