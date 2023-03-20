@@ -1,10 +1,10 @@
 import csv
-
+from django.conf import settings
 from recipes.models import Ingredient
 
 
 def run():
-    with open('data/ingredients.csv') as file:
+    with open(f'{settings.BASE_DIR}/api/static/data/ingredients.csv') as file:
         reader = csv.reader(file)
         for row in reader:
             ingredient = Ingredient(
