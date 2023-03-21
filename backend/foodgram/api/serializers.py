@@ -173,20 +173,22 @@ class ReadRecipeSerializer(serializers.ModelSerializer):
     def get_is_favorited(self, obj):
         """Проверяет, добавил ли пользователь рецепт в избранное."""
         request = self.context.get('request')
-        return (
-            request.user.is_authenticated
-            and (Favorite.objects.filter(
-                user=request.user, recipe=obj).exists())
-        )
+        if request is None or request.user.is_anonymous:
+            return False
+        return Favorite.objects.filter(
+            recipe=obj,
+            user=request.user
+        ).exists()
 
     def get_is_in_shopping_cart(self, obj):
         """Проверяет, добавил ли пользователь рецепт в список покупок."""
         request = self.context.get('request')
-        return (
-            request.user.is_authenticated
-            and ShoppingCart.objects.filter(
-                user=request.user, recipe=obj).exists()
-        )
+        if request is None or request.user.is_anonymous:
+            return False
+        return ShoppingCart.objects.filter(
+            recipe=obj,
+            user=request.user
+        ).exists()
 
     class Meta:
         model = Recipe
@@ -339,7 +341,6 @@ class SubscriptionSerialiser(serializers.ModelSerializer):
 
     def get_recipes(self, obj):
         """Возвращает список рецептов в подписках."""
-
         request = self.context.get('request')
         limit = request.GET.get('recipes_limit')
         recipes = obj.recipes.all()
